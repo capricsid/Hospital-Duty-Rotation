@@ -58,6 +58,37 @@ TMOs are visually grouped in the sheet as:
 
 These section labels are part of the exported format and should be preserved.
 
+### Staff Persistence
+
+Staff should be stored as a persistent master list inside the app, not re-entered from scratch each month.
+
+Required behavior:
+
+- once a TMO or HO is entered, the record remains available for future rosters
+- new monthly rosters should start by loading the saved staff list
+- the user can add new staff when needed
+- the user can temporarily exclude a staff member from a specific month without deleting them from the master list
+- the user can edit staff details such as name, employee code, section, and eligibility flags
+- the user can mark staff as inactive if they should no longer appear in future rosters by default
+
+Recommended stored fields for persistent staff records:
+
+- `id`
+- `name`
+- `employeeCode`
+- `staffType`: `TMO` or `HO`
+- `section` if TMO
+- default eligibility flags
+- default OPD category
+- active/inactive status
+
+Monthly roster generation should then use:
+
+- master staff list
+- month-specific inclusion/exclusion
+- month-specific leave and rotation data
+- month-specific overrides
+
 ### TMO Input
 
 Each TMO record should support:
@@ -404,6 +435,8 @@ Default export should match the sample style:
 
 - one worksheet
 
+The goal is not only to export roster data to Excel, but to reproduce the same practical layout style as the existing roster files as closely as possible.
+
 ### Sheet Structure
 
 Top section:
@@ -456,6 +489,66 @@ The export layer should support:
 - centered duty labels
 - visible section separation
 - preserved OPD block formatting
+
+### Excel Fidelity Requirements
+
+The generated roster should look like the current Excel files in structure and reading flow.
+
+That means the export should preserve or reproduce:
+
+- the same top-to-bottom section order
+- weekday and numeric date headers across the `24 -> 23` span
+- separate `WARD TMOS` and `NURSERY TMOS` labels
+- `HOUSE OFFICER` section below the TMO roster
+- `OPD ROSTER` block on the same worksheet
+- operational note rows on the same sheet
+- optional summary columns on the right where needed
+- merged cells for title, section labels, and multi-day rotation spans
+
+The app should treat the existing roster files as the visual template baseline.
+
+If formatting options are configurable, the default export must still produce a workbook that resembles the attached Excel rosters closely enough that staff can use it without changing their current workflow.
+
+## APK Distribution
+
+Android builds should produce a distributable APK as part of the project workflow.
+
+Required behavior:
+
+- keep a dedicated output folder inside the repo for generated APK files
+- current APK output folder: `Hospital Duty Roster APK/`
+- copy or place the generated APK there after a successful build
+- use versioned APK filenames when practical so builds are easy to identify
+
+Recommended filename style:
+
+- `hospital-duty-roster-v1.0.0.apk`
+- `hospital-duty-roster-v1.0.1.apk`
+
+## Versioning And Git Workflow
+
+This project should be managed as a Git-first codebase.
+
+Required behavior:
+
+- keep context updates in Git
+- keep app code changes in Git
+- bump the Android app version for each meaningful distributable APK build
+- commit version changes together with the code that produced the APK
+
+Recommended Android versioning:
+
+- `versionName` for human-readable release number
+- `versionCode` for internal Android build increment
+
+Suggested release workflow:
+
+1. update context and code
+2. increment `versionCode`
+3. update `versionName` when appropriate
+4. build APK
+5. copy APK into `Hospital Duty Roster APK/`
+6. commit and push the release changes
 
 ## Manual Override Support
 

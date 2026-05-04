@@ -1,0 +1,10 @@
+*.iml
+.gradle/
+/.tooling/
+/local.properties
+/.idea/
+/build/
+/app/build/
+/captures/
+/Hospital Duty Roster APK/*.apk
+!/Hospital Duty Roster APK/.gitkeep
