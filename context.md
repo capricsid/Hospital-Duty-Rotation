@@ -588,6 +588,15 @@ Before export, run cleanup checks:
 5. rotation spans are preserved correctly
 6. OPD rows only use eligible staff
 
+## Crash Fix Notes
+
+### Version 1.0.3
+
+- Fixed a crash that could happen immediately after tapping `Create roster`.
+- The created roster preview no longer uses a nested vertical scroll container inside the main roster list.
+- The `Create roster` action now catches generation errors and shows a toast instead of crashing the app.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this fix.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.

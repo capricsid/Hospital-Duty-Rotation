@@ -81,7 +81,6 @@ import com.capricsid.hospitaldutyroster.model.StaffMember
 import com.capricsid.hospitaldutyroster.model.StaffType
 import com.capricsid.hospitaldutyroster.model.TmoSection
 import com.capricsid.hospitaldutyroster.model.buildRoster
-import com.capricsid.hospitaldutyroster.model.buildRosterPreview
 import com.capricsid.hospitaldutyroster.model.defaultExportFileName
 import com.capricsid.hospitaldutyroster.model.parseLeaveDates
 import java.time.YearMonth
@@ -111,7 +110,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
     }
     val leaveInputs = remember { mutableStateMapOf<String, String>() }
 
-    fun createRoster() {
+    fun createRoster(): Result<RosterPreview> {
         val activeStaff = staff.filter { it.active }
         val selectedIds = activeStaff
             .filter { includedStaff[it.id] != false }
@@ -120,7 +119,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
         val leaves = activeStaff.associate { member ->
             member.id to parseLeaveDates(leaveInputs[member.id].orEmpty(), selectedMonth)
         }
-        preview = buildRoster(
+        val roster = buildRoster(
             RosterRequest(
                 rosterMonth = selectedMonth,
                 staff = staff.toList(),
@@ -128,6 +127,8 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                 leavesByStaffId = leaves
             )
         )
+        preview = roster
+        return Result.success(roster)
     }
 
     fun saveStaff(updated: List<StaffMember>) {
@@ -147,7 +148,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.2 • Roster create and Excel export",
+                            text = "v1.0.3 • Roster create crash fix",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -367,7 +368,7 @@ private fun RosterScreen(
     leaveInputs: MutableMap<String, String>,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onCreateRoster: () -> Unit
+    onCreateRoster: () -> Result<RosterPreview>
 ) {
     val context = LocalContext.current
     val exporter = remember { RosterExcelExporter() }
@@ -475,8 +476,9 @@ private fun MonthSelectorCard(
     selectedMonth: YearMonth,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onCreateRoster: () -> Unit
+    onCreateRoster: () -> Result<RosterPreview>
 ) {
+    val context = LocalContext.current
     OutlinedCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Roster cycle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -496,7 +498,22 @@ private fun MonthSelectorCard(
                     Text("Next")
                 }
             }
-            Button(onClick = onCreateRoster, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    runCatching { onCreateRoster() }
+                        .fold(
+                            onSuccess = { result ->
+                                result.onFailure { error ->
+                                    Toast.makeText(context, "Roster failed: ${error.message}", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            onFailure = { error ->
+                                Toast.makeText(context, "Roster failed: ${error.message}", Toast.LENGTH_LONG).show()
+                            }
+                        )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Create roster")
@@ -582,7 +599,6 @@ private fun DoctorRosterInputRow(
 @Composable
 private fun RosterPreviewCard(preview: RosterPreview) {
     val horizontalScroll = rememberScrollState()
-    val verticalScroll = rememberScrollState()
 
     OutlinedCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -591,15 +607,10 @@ private fun RosterPreviewCard(preview: RosterPreview) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(420.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(20.dp))
                     .padding(12.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(verticalScroll)
-                        .horizontalScroll(horizontalScroll)
-                ) {
+                Column(modifier = Modifier.horizontalScroll(horizontalScroll)) {
                     HeaderRow(preview)
                     SectionHeaderRow("WARD TMOS")
                     preview.wardRows.forEach { PreviewDataRow(it) }
