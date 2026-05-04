@@ -1,5 +1,8 @@
 package com.capricsid.hospitaldutyroster.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -24,13 +27,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.ModeEdit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -51,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,18 +66,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import com.capricsid.hospitaldutyroster.data.RosterExcelExporter
 import com.capricsid.hospitaldutyroster.data.StaffRepository
 import com.capricsid.hospitaldutyroster.model.ExperienceLevel
 import com.capricsid.hospitaldutyroster.model.OpdCategory
 import com.capricsid.hospitaldutyroster.model.PreviewRow
+import com.capricsid.hospitaldutyroster.model.RosterRequest
 import com.capricsid.hospitaldutyroster.model.RosterPreview
 import com.capricsid.hospitaldutyroster.model.StaffMember
 import com.capricsid.hospitaldutyroster.model.StaffType
 import com.capricsid.hospitaldutyroster.model.TmoSection
+import com.capricsid.hospitaldutyroster.model.buildRoster
 import com.capricsid.hospitaldutyroster.model.buildRosterPreview
+import com.capricsid.hospitaldutyroster.model.defaultExportFileName
+import com.capricsid.hospitaldutyroster.model.parseLeaveDates
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -90,13 +103,41 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
     var showEditor by remember { mutableStateOf(false) }
     var editingStaffId by remember { mutableStateOf<String?>(null) }
     var selectedMonth by rememberSaveable { mutableStateOf(YearMonth.now()) }
-    var preview by remember { mutableStateOf(buildRosterPreview(selectedMonth, staff.toList())) }
+    var preview by remember { mutableStateOf<RosterPreview?>(null) }
+    val includedStaff = remember {
+        mutableStateMapOf<String, Boolean>().apply {
+            loadedStaff.forEach { member -> put(member.id, member.active) }
+        }
+    }
+    val leaveInputs = remember { mutableStateMapOf<String, String>() }
+
+    fun createRoster() {
+        val activeStaff = staff.filter { it.active }
+        val selectedIds = activeStaff
+            .filter { includedStaff[it.id] != false }
+            .map { it.id }
+            .toSet()
+        val leaves = activeStaff.associate { member ->
+            member.id to parseLeaveDates(leaveInputs[member.id].orEmpty(), selectedMonth)
+        }
+        preview = buildRoster(
+            RosterRequest(
+                rosterMonth = selectedMonth,
+                staff = staff.toList(),
+                includedStaffIds = selectedIds,
+                leavesByStaffId = leaves
+            )
+        )
+    }
 
     fun saveStaff(updated: List<StaffMember>) {
         staff.clear()
         staff.addAll(updated.sortedBy { it.name })
+        staff.forEach { member ->
+            includedStaff.putIfAbsent(member.id, member.active)
+        }
         repository.saveStaff(staff.toList())
-        preview = buildRosterPreview(selectedMonth, staff.toList())
+        preview = null
     }
 
     Scaffold(
@@ -106,7 +147,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.1 • Git-tracked APK foundation",
+                            text = "v1.0.2 • Roster create and Excel export",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -163,17 +204,17 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                 staff = staff.toList(),
                 selectedMonth = selectedMonth,
                 preview = preview,
+                includedStaff = includedStaff,
+                leaveInputs = leaveInputs,
                 onPreviousMonth = {
                     selectedMonth = selectedMonth.minusMonths(1)
-                    preview = buildRosterPreview(selectedMonth, staff.toList())
+                    preview = null
                 },
                 onNextMonth = {
                     selectedMonth = selectedMonth.plusMonths(1)
-                    preview = buildRosterPreview(selectedMonth, staff.toList())
+                    preview = null
                 },
-                onRefreshPreview = {
-                    preview = buildRosterPreview(selectedMonth, staff.toList())
-                }
+                onCreateRoster = ::createRoster
             )
         }
     }
@@ -321,14 +362,37 @@ private fun RosterScreen(
     modifier: Modifier = Modifier,
     staff: List<StaffMember>,
     selectedMonth: YearMonth,
-    preview: RosterPreview,
+    preview: RosterPreview?,
+    includedStaff: MutableMap<String, Boolean>,
+    leaveInputs: MutableMap<String, String>,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onRefreshPreview: () -> Unit
+    onCreateRoster: () -> Unit
 ) {
+    val context = LocalContext.current
+    val exporter = remember { RosterExcelExporter() }
+    var pendingExport by remember { mutableStateOf<RosterPreview?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.ms-excel")
+    ) { uri ->
+        val roster = pendingExport
+        if (uri != null && roster != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    exporter.export(roster, stream)
+                } ?: error("Could not open export file")
+            }.onSuccess {
+                Toast.makeText(context, "Roster exported", Toast.LENGTH_SHORT).show()
+            }.onFailure { error ->
+                Toast.makeText(context, "Export failed: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+        pendingExport = null
+    }
     val activeStaff = staff.filter { it.active }
-    val activeTmos = activeStaff.count { it.staffType == StaffType.TMO }
-    val activeHos = activeStaff.count { it.staffType == StaffType.HO }
+    val selectedDoctors = activeStaff.count { includedStaff[it.id] != false }
+    val selectedTmos = activeStaff.count { it.staffType == StaffType.TMO && includedStaff[it.id] != false }
+    val selectedHos = activeStaff.count { it.staffType == StaffType.HO && includedStaff[it.id] != false }
 
     LazyColumn(
         modifier = modifier
@@ -339,12 +403,12 @@ private fun RosterScreen(
         item {
             Spacer(Modifier.height(8.dp))
             SummaryHeroCard(
-                title = "Excel-Style Roster Setup",
-                subtitle = "This build keeps your saved staff, prepares a 24→23 roster cycle, and previews the same section order used by the current Excel roster files.",
+                title = "Present Month Roster",
+                subtitle = "Select the doctors for this month, enter leaves, then create a 24 to 23 duty roster with an Excel export.",
                 chips = listOf(
-                    "Active TMOs $activeTmos",
-                    "Active HOs $activeHos",
-                    "Output APK folder ready"
+                    "Selected $selectedDoctors",
+                    "TMOs $selectedTmos",
+                    "HOs $selectedHos"
                 )
             )
         }
@@ -354,20 +418,50 @@ private fun RosterScreen(
                 selectedMonth = selectedMonth,
                 onPreviousMonth = onPreviousMonth,
                 onNextMonth = onNextMonth,
-                onRefreshPreview = onRefreshPreview
+                onCreateRoster = onCreateRoster
             )
         }
 
         item {
-            SectionHeader("Preview")
-            Text(
-                "This first APK focuses on persistent staff and roster structure fidelity. The preview matches the workbook reading flow so the next milestone can plug in full rule-based duty assignment and Excel export.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            DoctorSelectionCard(
+                staff = activeStaff,
+                includedStaff = includedStaff,
+                leaveInputs = leaveInputs
             )
         }
 
-        item {
-            RosterPreviewCard(preview = preview)
+        if (preview == null) {
+            item {
+                SectionHeader("Roster")
+                Text(
+                    "No roster has been created yet for this month.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionHeader("Created Roster")
+                    Button(
+                        onClick = {
+                            pendingExport = preview
+                            exportLauncher.launch(defaultExportFileName(selectedMonth))
+                        }
+                    ) {
+                        Icon(Icons.Outlined.Description, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Export Excel")
+                    }
+                }
+            }
+
+            item {
+                RosterPreviewCard(preview = preview)
+            }
         }
 
         item {
@@ -381,7 +475,7 @@ private fun MonthSelectorCard(
     selectedMonth: YearMonth,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onRefreshPreview: () -> Unit
+    onCreateRoster: () -> Unit
 ) {
     OutlinedCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -402,11 +496,86 @@ private fun MonthSelectorCard(
                     Text("Next")
                 }
             }
-            ElevatedAssistChip(
-                onClick = onRefreshPreview,
-                label = { Text("Refresh Excel-style preview") }
-            )
+            Button(onClick = onCreateRoster, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Create roster")
+            }
         }
+    }
+}
+
+@Composable
+private fun DoctorSelectionCard(
+    staff: List<StaffMember>,
+    includedStaff: MutableMap<String, Boolean>,
+    leaveInputs: MutableMap<String, String>
+) {
+    OutlinedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Doctors and leaves", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Leaves can be entered as day numbers or ranges, for example 24, 28-30, 5, 2026-06-10.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            staff.sortedWith(compareBy<StaffMember> { it.staffType.name }.thenBy { it.section?.name.orEmpty() }.thenBy { it.name })
+                .forEach { member ->
+                    DoctorRosterInputRow(
+                        member = member,
+                        included = includedStaff[member.id] != false,
+                        leaveText = leaveInputs[member.id].orEmpty(),
+                        onIncludedChange = { includedStaff[member.id] = it },
+                        onLeaveChange = { leaveInputs[member.id] = it }
+                    )
+                }
+        }
+    }
+}
+
+@Composable
+private fun DoctorRosterInputRow(
+    member: StaffMember,
+    included: Boolean,
+    leaveText: String,
+    onIncludedChange: (Boolean) -> Unit,
+    onLeaveChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Checkbox(checked = included, onCheckedChange = onIncludedChange)
+                Column {
+                    Text(member.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        buildString {
+                            append(member.staffType.name)
+                            if (member.staffType == StaffType.TMO) {
+                                append(" • ")
+                                append(member.section?.name ?: "UNSET")
+                                append(" • ")
+                                append(member.experienceLevel.name)
+                            }
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = leaveText,
+            onValueChange = onLeaveChange,
+            enabled = included,
+            label = { Text("Leaves for ${member.name}") },
+            placeholder = { Text("24, 28-30, 5") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        HorizontalDivider()
     }
 }
 
@@ -440,7 +609,7 @@ private fun RosterPreviewCard(preview: RosterPreview) {
                     preview.hoRows.forEach { PreviewDataRow(it) }
                     SectionHeaderRow("OPD ROSTER")
                     preview.opdTracks.forEach { track ->
-                        OpdTrackRow(track.label, track.dates, track.placeholder)
+                        OpdTrackRow(track.label, track.dates, track.assignments)
                     }
                 }
             }
@@ -507,7 +676,7 @@ private fun PreviewDataRow(row: PreviewRow) {
 }
 
 @Composable
-private fun OpdTrackRow(label: String, dates: List<String>, placeholder: String) {
+private fun OpdTrackRow(label: String, dates: List<String>, assignments: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, fontWeight = FontWeight.Medium)
         Text(
@@ -516,7 +685,7 @@ private fun OpdTrackRow(label: String, dates: List<String>, placeholder: String)
             style = MaterialTheme.typography.bodySmall
         )
         Text(
-            placeholder,
+            "Assignments: ${assignments.joinToString(", ")}",
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))

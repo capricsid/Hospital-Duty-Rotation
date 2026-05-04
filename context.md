@@ -89,6 +89,23 @@ Monthly roster generation should then use:
 - month-specific leave and rotation data
 - month-specific overrides
 
+### Current Confirmed Staff List
+
+As of the May 2026 app update, the canonical in-app staff list should contain only these doctors unless the user manually adds more later:
+
+- `WARD TMOS`: `ISMAIL`, `IHSAN`, `AIMAN`, `SULAIMAN`, `IZAZ`, `ASIM`, `IHTESHAM`
+- `NURSERY TMOS`: `ABBAS`, `ROMAN`, `WASEEM`, `UMER`, `HASSAN`, `ATEEQ`
+- `HOUSE OFFICERS`: `GOHAR`, `OWAIS`
+
+Default rule flags from the latest explanation:
+
+- `ISMAIL`, `IHSAN`, `AIMAN`, `ABBAS`, `ROMAN`, and `WASEEM` are treated as senior TMOs.
+- `SULAIMAN` and `UMER` are treated as mid-level TMOs.
+- `IZAZ`, `HASSAN`, `ASIM`, `IHTESHAM`, and `ATEEQ` are treated as junior or reduced-night TMOs.
+- `AIMAN` is not eligible for `CT2` by default and has reduced nights.
+- `ABBAS` and `ROMAN` prefer weekend off because of Saturday/Sunday clinic duties.
+- Extra legacy seeded doctors should be removed by migration so the master list starts from the confirmed list.
+
 ### TMO Input
 
 Each TMO record should support:

@@ -13,15 +13,21 @@ class StaffRepository(context: Context) {
     private val preferences = context.getSharedPreferences("hospital_duty_roster", Context.MODE_PRIVATE)
 
     fun loadStaff(): List<StaffMember> {
-        val raw = preferences.getString(KEY_STAFF, null) ?: return seedStaff()
-        return runCatching {
+        val raw = preferences.getString(KEY_STAFF, null) ?: return canonicalStaff().also { saveStaff(it) }
+        val loaded = runCatching {
             val array = JSONArray(raw)
             buildList {
                 for (index in 0 until array.length()) {
                     add(array.getJSONObject(index).toStaffMember())
                 }
             }
-        }.getOrElse { seedStaff() }
+        }.getOrElse { canonicalStaff() }
+
+        return if (preferences.getInt(KEY_STAFF_VERSION, 0) < CURRENT_STAFF_VERSION) {
+            migrateToCurrentStaff(loaded).also { saveStaff(it) }
+        } else {
+            loaded
+        }
     }
 
     fun saveStaff(staff: List<StaffMember>) {
@@ -29,13 +35,31 @@ class StaffRepository(context: Context) {
         staff.forEach { member ->
             json.put(member.toJson())
         }
-        preferences.edit().putString(KEY_STAFF, json.toString()).apply()
+        preferences.edit()
+            .putString(KEY_STAFF, json.toString())
+            .putInt(KEY_STAFF_VERSION, CURRENT_STAFF_VERSION)
+            .apply()
     }
 
-    private fun seedStaff(): List<StaffMember> = listOf(
+    private fun migrateToCurrentStaff(existing: List<StaffMember>): List<StaffMember> {
+        val existingByName = existing.associateBy { it.name.uppercase() }
+        return canonicalStaff().map { canonical ->
+            val saved = existingByName[canonical.name]
+            if (saved == null) {
+                canonical
+            } else {
+                canonical.copy(
+                    id = saved.id,
+                    employeeCode = saved.employeeCode.ifBlank { canonical.employeeCode },
+                    active = saved.active
+                )
+            }
+        }
+    }
+
+    private fun canonicalStaff(): List<StaffMember> = listOf(
         StaffMember(
             name = "ISMAIL",
-            employeeCode = "11215",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
             experienceLevel = ExperienceLevel.SENIOR,
@@ -43,21 +67,102 @@ class StaffRepository(context: Context) {
         ),
         StaffMember(
             name = "IHSAN",
-            employeeCode = "11180",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
-            experienceLevel = ExperienceLevel.MID,
+            experienceLevel = ExperienceLevel.SENIOR,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
+            name = "AIMAN",
+            staffType = StaffType.TMO,
+            section = TmoSection.WARD,
+            experienceLevel = ExperienceLevel.SENIOR,
+            ct2Eligible = false,
+            reducedNights = true,
+            opdCategory = OpdCategory.SENIOR
+        ),
+        StaffMember(
+            name = "SULAIMAN",
+            staffType = StaffType.TMO,
+            section = TmoSection.WARD,
+            experienceLevel = ExperienceLevel.MID
+        ),
+        StaffMember(
+            name = "IZAZ",
+            staffType = StaffType.TMO,
+            section = TmoSection.WARD,
+            experienceLevel = ExperienceLevel.JUNIOR,
+            reducedNights = true,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
+            name = "ASIM",
+            staffType = StaffType.TMO,
+            section = TmoSection.WARD,
+            experienceLevel = ExperienceLevel.JUNIOR,
+            reducedNights = true,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
+            name = "IHTESHAM",
+            staffType = StaffType.TMO,
+            section = TmoSection.WARD,
+            experienceLevel = ExperienceLevel.JUNIOR,
+            reducedNights = true,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
             name = "ABBAS",
-            employeeCode = "11219",
+            staffType = StaffType.TMO,
+            section = TmoSection.NURSERY,
+            experienceLevel = ExperienceLevel.SENIOR,
+            weekendPreferenceOff = true,
+            opdCategory = OpdCategory.SENIOR
+        ),
+        StaffMember(
+            name = "ROMAN",
+            staffType = StaffType.TMO,
+            section = TmoSection.NURSERY,
+            experienceLevel = ExperienceLevel.SENIOR,
+            weekendPreferenceOff = true,
+            opdCategory = OpdCategory.SENIOR
+        ),
+        StaffMember(
+            name = "WASEEM",
+            staffType = StaffType.TMO,
+            section = TmoSection.NURSERY,
+            experienceLevel = ExperienceLevel.SENIOR,
+            opdCategory = OpdCategory.SENIOR
+        ),
+        StaffMember(
+            name = "UMER",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
             experienceLevel = ExperienceLevel.MID
         ),
         StaffMember(
+            name = "HASSAN",
+            staffType = StaffType.TMO,
+            section = TmoSection.NURSERY,
+            experienceLevel = ExperienceLevel.JUNIOR,
+            reducedNights = true,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
+            name = "ATEEQ",
+            staffType = StaffType.TMO,
+            section = TmoSection.NURSERY,
+            experienceLevel = ExperienceLevel.JUNIOR,
+            reducedNights = true,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
             name = "GOHAR",
+            staffType = StaffType.HO,
+            opdCategory = OpdCategory.NEW_TMO
+        ),
+        StaffMember(
+            name = "OWAIS",
             staffType = StaffType.HO,
             opdCategory = OpdCategory.NEW_TMO
         )
@@ -93,6 +198,8 @@ class StaffRepository(context: Context) {
 
     private companion object {
         const val KEY_STAFF = "master_staff"
+        const val KEY_STAFF_VERSION = "master_staff_version"
+        const val CURRENT_STAFF_VERSION = 2
     }
 }
 
