@@ -109,6 +109,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
         }
     }
     val leaveInputs = remember { mutableStateMapOf<String, String>() }
+    val leaveEnabled = remember { mutableStateMapOf<String, Boolean>() }
 
     fun createRoster(): Result<RosterPreview> {
         val activeStaff = staff.filter { it.active }
@@ -116,8 +117,15 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
             .filter { includedStaff[it.id] != false }
             .map { it.id }
             .toSet()
+        if (selectedIds.isEmpty()) {
+            return Result.failure(IllegalStateException("Select at least one doctor for this month."))
+        }
         val leaves = activeStaff.associate { member ->
-            member.id to parseLeaveDates(leaveInputs[member.id].orEmpty(), selectedMonth)
+            member.id to if (leaveEnabled[member.id] == true) {
+                parseLeaveDates(leaveInputs[member.id].orEmpty(), selectedMonth)
+            } else {
+                emptySet()
+            }
         }
         val roster = buildRoster(
             RosterRequest(
@@ -136,6 +144,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
         staff.addAll(updated.sortedBy { it.name })
         staff.forEach { member ->
             includedStaff.putIfAbsent(member.id, member.active)
+            leaveEnabled.putIfAbsent(member.id, false)
         }
         repository.saveStaff(staff.toList())
         preview = null
@@ -148,7 +157,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.4 • OPD assignment crash fix",
+                            text = "v1.0.5 - leave selection and export format update",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -207,6 +216,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                 preview = preview,
                 includedStaff = includedStaff,
                 leaveInputs = leaveInputs,
+                leaveEnabled = leaveEnabled,
                 onPreviousMonth = {
                     selectedMonth = selectedMonth.minusMonths(1)
                     preview = null
@@ -366,6 +376,7 @@ private fun RosterScreen(
     preview: RosterPreview?,
     includedStaff: MutableMap<String, Boolean>,
     leaveInputs: MutableMap<String, String>,
+    leaveEnabled: MutableMap<String, Boolean>,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onCreateRoster: () -> Result<RosterPreview>
@@ -427,7 +438,8 @@ private fun RosterScreen(
             DoctorSelectionCard(
                 staff = activeStaff,
                 includedStaff = includedStaff,
-                leaveInputs = leaveInputs
+                leaveInputs = leaveInputs,
+                leaveEnabled = leaveEnabled
             )
         }
 
@@ -526,13 +538,14 @@ private fun MonthSelectorCard(
 private fun DoctorSelectionCard(
     staff: List<StaffMember>,
     includedStaff: MutableMap<String, Boolean>,
-    leaveInputs: MutableMap<String, String>
+    leaveInputs: MutableMap<String, String>,
+    leaveEnabled: MutableMap<String, Boolean>
 ) {
     OutlinedCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Doctors and leaves", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Leaves can be entered as day numbers or ranges, for example 24, 28-30, 5, 2026-06-10.",
+                "Doctors can stay included in the roster by default. Turn on leave only for the staff who need leave dates or ranges.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -541,8 +554,15 @@ private fun DoctorSelectionCard(
                     DoctorRosterInputRow(
                         member = member,
                         included = includedStaff[member.id] != false,
+                        leaveSelected = leaveEnabled[member.id] == true,
                         leaveText = leaveInputs[member.id].orEmpty(),
                         onIncludedChange = { includedStaff[member.id] = it },
+                        onLeaveSelectedChange = {
+                            leaveEnabled[member.id] = it
+                            if (!it) {
+                                leaveInputs[member.id] = ""
+                            }
+                        },
                         onLeaveChange = { leaveInputs[member.id] = it }
                     )
                 }
@@ -554,8 +574,10 @@ private fun DoctorSelectionCard(
 private fun DoctorRosterInputRow(
     member: StaffMember,
     included: Boolean,
+    leaveSelected: Boolean,
     leaveText: String,
     onIncludedChange: (Boolean) -> Unit,
+    onLeaveSelectedChange: (Boolean) -> Unit,
     onLeaveChange: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -584,14 +606,38 @@ private fun DoctorRosterInputRow(
                 }
             }
         }
-        OutlinedTextField(
-            value = leaveText,
-            onValueChange = onLeaveChange,
-            enabled = included,
-            label = { Text("Leaves for ${member.name}") },
-            placeholder = { Text("24, 28-30, 5") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (included) "Included in roster" else "Excluded from roster",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Leave", style = MaterialTheme.typography.bodySmall)
+                Checkbox(
+                    checked = leaveSelected,
+                    onCheckedChange = {
+                        if (included) {
+                            onLeaveSelectedChange(it)
+                        }
+                    },
+                    enabled = included
+                )
+            }
+        }
+        if (included && leaveSelected) {
+            OutlinedTextField(
+                value = leaveText,
+                onValueChange = onLeaveChange,
+                label = { Text("Leave dates for ${member.name}") },
+                placeholder = { Text("24, 28-30, 5, 2026-06-10") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         HorizontalDivider()
     }
 }

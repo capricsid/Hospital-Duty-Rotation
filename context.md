@@ -146,6 +146,22 @@ Examples:
 - `PROJECT 2 ROTATION`
 - custom blocked labels
 
+### Monthly Roster Screen Behavior
+
+The monthly roster screen should distinguish clearly between:
+
+- doctors included in the roster for that month
+- doctors who have leave entries for that month
+
+Required behavior:
+
+- active staff may be included in the monthly roster by default
+- leave should not appear as pre-selected for every doctor
+- each doctor should have an explicit leave toggle or leave checkbox
+- leave date input should only be shown or enabled when leave is selected for that doctor
+- the user should be able to enter leave as day numbers, explicit dates, or ranges
+- excluding a doctor from a month is separate from marking that doctor on leave
+
 ## Calendar Rules
 
 Generate a date range from the `24th` through the `23rd`.
@@ -490,6 +506,7 @@ Optional right-side summary columns:
 - `CT1`
 - `CT2`
 - `OFF`
+- `L`
 - `TOTAL DUTIES` or `HARD DUTIES`
 
 Footer:
@@ -521,6 +538,19 @@ That means the export should preserve or reproduce:
 - operational note rows on the same sheet
 - optional summary columns on the right where needed
 - merged cells for title, section labels, and multi-day rotation spans
+
+When summary columns are shown, they should be exported as separate right-side columns rather than one combined text field.
+
+The order should remain close to the real files:
+
+1. title
+2. weekday header
+3. date-number header
+4. `WARD TMOS`
+5. `NURSERY TMOS`
+6. operational notes
+7. `HOUSE OFFICER`
+8. `OPD ROSTER`
 
 The app should treat the existing roster files as the visual template baseline.
 
