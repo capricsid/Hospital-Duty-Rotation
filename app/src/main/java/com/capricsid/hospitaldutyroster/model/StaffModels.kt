@@ -359,8 +359,10 @@ private fun buildOpdTracks(
 
     fun assignmentFor(pool: List<StaffMember>, index: Int): String {
         if (pool.isEmpty()) return ""
-        val available = pool.filter { member -> cellsByStaff.getValue(member.id)[index] !in setOf("L", "N", "CT2") }
-        return (available.ifEmpty { pool })[(index + pool.size) % pool.size].name
+        val assignablePool = pool.filter { member ->
+            cellsByStaff.getValue(member.id)[index] !in setOf("L", "N", "CT2")
+        }.ifEmpty { pool }
+        return assignablePool[index % assignablePool.size].name
     }
 
     return listOf(
