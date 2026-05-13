@@ -17,7 +17,6 @@ private data class SummaryCounts(
     val ct1: Int,
     val ct2: Int,
     val off: Int,
-    val leave: Int,
     val totalDuties: Int
 )
 
@@ -26,19 +25,19 @@ private fun PreviewRow.summaryCounts(): SummaryCounts {
     val ct1 = cells.count { it == "CT1" }
     val ct2 = cells.count { it == "CT2" }
     val off = cells.count { it == "O" }
-    val leave = cells.count { it == "L" }
     return SummaryCounts(
         nights = nights,
         ct1 = ct1,
         ct2 = ct2,
         off = off,
-        leave = leave,
         totalDuties = nights + ct1 + ct2
     )
 }
 
 private fun RosterPreview.toSpreadsheetXml(): String = buildString {
-    val titleMergeAcross = days.size + 7
+    val summaryColumnCount = 5
+    val totalColumns = 2 + days.size + summaryColumnCount
+    val mergeAcross = totalColumns - 1
 
     appendLine("""<?xml version="1.0"?>""")
     appendLine("""<?mso-application progid="Excel.Sheet"?>""")
@@ -49,39 +48,49 @@ private fun RosterPreview.toSpreadsheetXml(): String = buildString {
             """xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" """ +
             """xmlns:html="http://www.w3.org/TR/REC-html40">"""
     )
-    appendLine("<Styles>")
-    appendLine("""<Style ss:ID="Title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1" ss:Size="14"/></Style>""")
-    appendLine("""<Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Section"><Font ss:Bold="1"/><Interior ss:Color="#E2EFDA" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Cell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="NameCell"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="NoteCell"><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("</Styles>")
-    appendLine("""<Worksheet ss:Name="Sheet1">""")
+    appendStyles()
+    appendLine("""<Worksheet ss:Name="Roster">""")
     appendLine("<Table>")
 
-    appendLine("""<Column ss:Width="140"/>""")
-    appendLine("""<Column ss:Width="70"/>""")
-    repeat(days.size) { appendLine("""<Column ss:Width="42"/>""") }
-    appendLine("""<Column ss:Width="42"/>""")
-    appendLine("""<Column ss:Width="48"/>""")
-    appendLine("""<Column ss:Width="48"/>""")
-    appendLine("""<Column ss:Width="48"/>""")
-    appendLine("""<Column ss:Width="42"/>""")
-    appendLine("""<Column ss:Width="72"/>""")
+    appendLine("""<Column ss:Width="120"/>""")
+    appendLine("""<Column ss:Width="58"/>""")
+    repeat(days.size) { appendLine("""<Column ss:Width="30"/>""") }
+    appendLine("""<Column ss:Width="36"/>""")
+    appendLine("""<Column ss:Width="40"/>""")
+    appendLine("""<Column ss:Width="40"/>""")
+    appendLine("""<Column ss:Width="40"/>""")
+    appendLine("""<Column ss:Width="68"/>""")
 
-    appendLine("""<Row ss:Height="24"><Cell ss:MergeAcross="$titleMergeAcross" ss:StyleID="Title"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>""")
+    appendLine("""<Row ss:Height="32"><Cell ss:MergeAcross="$mergeAcross" ss:StyleID="Title"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>""")
 
     appendHeaderRows(this)
-    appendSection(this, "WARD TMOS", wardRows)
-    appendSection(this, "NURSERY TMOS", nurseryRows)
-    appendNotesSection(this, notes)
-    appendSection(this, "HOUSE OFFICER", hoRows)
-    appendOpdSection(this)
+    appendSection(this, "WARD TMOS", wardRows, includeSummary = true)
+    appendSection(this, "NURSERY TMOS", nurseryRows, includeSummary = true)
+    appendBlankRow(totalColumns)
+    appendNotesSection(this, totalColumns)
+    appendBlankRow(totalColumns)
+    appendSection(this, "HOUSE OFFICER", hoRows, includeSummary = false)
+    appendBlankRow(totalColumns)
+    appendOpdSection(this, summaryColumnCount)
+    appendBlankRow(totalColumns)
+    appendBlankRow(totalColumns)
+    appendSignatureRow(totalColumns)
 
     appendLine("</Table>")
     appendLine("</Worksheet>")
     appendLine("</Workbook>")
+}
+
+private fun StringBuilder.appendStyles() {
+    appendLine("<Styles>")
+    appendLine("""<Style ss:ID="Title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1" ss:Size="14"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#EAF2D3" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="Section"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#D9EAD3" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="Cell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="NameCell"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="MergedNote"><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
+    appendLine("""<Style ss:ID="Signature"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Font ss:Bold="1"/></Style>""")
+    appendLine("</Styles>")
 }
 
 private fun RosterPreview.appendHeaderRows(builder: StringBuilder) {
@@ -93,7 +102,6 @@ private fun RosterPreview.appendHeaderRows(builder: StringBuilder) {
     builder.append(headerCell("CT1"))
     builder.append(headerCell("CT2"))
     builder.append(headerCell("OFF"))
-    builder.append(headerCell("L"))
     builder.append(headerCell("TOTAL DUTIES"))
     builder.appendLine("</Row>")
 
@@ -105,61 +113,56 @@ private fun RosterPreview.appendHeaderRows(builder: StringBuilder) {
     builder.append(headerCell("CT1"))
     builder.append(headerCell("CT2"))
     builder.append(headerCell("OFF"))
-    builder.append(headerCell("L"))
     builder.append(headerCell("TOTAL"))
     builder.appendLine("</Row>")
 }
 
-private fun RosterPreview.appendSection(builder: StringBuilder, title: String, rows: List<PreviewRow>) {
-    builder.appendLine(sectionRow(title, days.size))
+private fun RosterPreview.appendSection(
+    builder: StringBuilder,
+    title: String,
+    rows: List<PreviewRow>,
+    includeSummary: Boolean
+) {
+    builder.appendLine(sectionRow(title, 2 + days.size + 5))
     rows.forEach { row ->
         val summary = row.summaryCounts()
         builder.append("""<Row>""")
         builder.append(nameCell(row.label))
         builder.append(cell(row.badge))
         row.cells.forEach { duty -> builder.append(cell(duty)) }
-        builder.append(cell(summary.nights.toString()))
-        builder.append(cell(summary.ct1.toString()))
-        builder.append(cell(summary.ct2.toString()))
-        builder.append(cell(summary.off.toString()))
-        builder.append(cell(summary.leave.toString()))
-        builder.append(cell(summary.totalDuties.toString()))
+        if (includeSummary) {
+            builder.append(cell(summary.nights.toString()))
+            builder.append(cell(summary.ct1.toString()))
+            builder.append(cell(summary.ct2.toString()))
+            builder.append(cell(summary.off.toString()))
+            builder.append(cell(summary.totalDuties.toString()))
+        } else {
+            repeat(5) { builder.append(cell("")) }
+        }
         builder.appendLine("</Row>")
     }
 }
 
-private fun RosterPreview.appendNotesSection(builder: StringBuilder, notes: List<String>) {
-    builder.appendLine(sectionRow("OPERATIONAL NOTES", days.size))
+private fun RosterPreview.appendNotesSection(builder: StringBuilder, totalColumns: Int) {
     notes.forEach { note ->
-        builder.append("""<Row>""")
-        builder.append(noteCell(note))
-        repeat(days.size + 7) { builder.append(cell("")) }
-        builder.appendLine("</Row>")
+        builder.appendLine(
+            """<Row><Cell ss:MergeAcross="${totalColumns - 1}" ss:StyleID="MergedNote"><Data ss:Type="String">${note.xml()}</Data></Cell></Row>"""
+        )
     }
 }
 
-private fun RosterPreview.appendOpdSection(builder: StringBuilder) {
-    builder.appendLine(sectionRow("OPD ROSTER", days.size))
-
-    val opdLabelsByDay = days.associateBy(
-        keySelector = { "${it.dayLabel} ${it.dayNumber}" },
-        valueTransform = { it.dayLabel }
-    )
-    val opdNumbersByDay = days.associateBy(
-        keySelector = { "${it.dayLabel} ${it.dayNumber}" },
-        valueTransform = { it.dayNumber }
-    )
+private fun RosterPreview.appendOpdSection(builder: StringBuilder, summaryColumnCount: Int) {
+    builder.appendLine(sectionRow("OPD ROSTER", 2 + days.size + summaryColumnCount))
 
     val allOpdDateLabels = opdTracks.flatMap { it.dates }.toSet()
-
     builder.append("""<Row>""")
     builder.append(cell(""))
     builder.append(cell(""))
     days.forEach { day ->
         val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in allOpdDateLabels) opdLabelsByDay[key].orEmpty() else ""))
+        builder.append(headerCell(if (key in allOpdDateLabels) day.dayLabel else ""))
     }
-    repeat(6) { builder.append(cell("")) }
+    repeat(summaryColumnCount) { builder.append(cell("")) }
     builder.appendLine("</Row>")
 
     builder.append("""<Row>""")
@@ -167,9 +170,9 @@ private fun RosterPreview.appendOpdSection(builder: StringBuilder) {
     builder.append(cell(""))
     days.forEach { day ->
         val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in allOpdDateLabels) opdNumbersByDay[key].orEmpty() else ""))
+        builder.append(headerCell(if (key in allOpdDateLabels) day.dayNumber else ""))
     }
-    repeat(6) { builder.append(cell("")) }
+    repeat(summaryColumnCount) { builder.append(cell("")) }
     builder.appendLine("</Row>")
 
     opdTracks.forEach { track ->
@@ -181,22 +184,34 @@ private fun RosterPreview.appendOpdSection(builder: StringBuilder) {
             val key = "${day.dayLabel} ${day.dayNumber}"
             builder.append(cell(assignmentsByDate[key].orEmpty()))
         }
-        repeat(6) { builder.append(cell("")) }
+        repeat(summaryColumnCount) { builder.append(cell("")) }
         builder.appendLine("</Row>")
     }
+}
+
+private fun StringBuilder.appendBlankRow(totalColumns: Int) {
+    append("""<Row>""")
+    repeat(totalColumns) { append(cell("")) }
+    appendLine("</Row>")
+}
+
+private fun StringBuilder.appendSignatureRow(totalColumns: Int) {
+    val registrarStartIndex = totalColumns / 2 + 1
+    val firstMergeAcross = registrarStartIndex - 2
+    val secondMergeAcross = totalColumns - registrarStartIndex
+    appendLine(
+        """<Row><Cell ss:MergeAcross="$firstMergeAcross" ss:StyleID="Signature"><Data ss:Type="String">DMC SIGNATURE: _______________________</Data></Cell><Cell ss:Index="$registrarStartIndex" ss:MergeAcross="$secondMergeAcross" ss:StyleID="Signature"><Data ss:Type="String">REGISTRAR SIGNATURE: ____________________</Data></Cell></Row>"""
+    )
 }
 
 private fun headerCell(value: String): String =
     """<Cell ss:StyleID="Header"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
 
-private fun sectionRow(title: String, dayCount: Int): String =
-    """<Row><Cell ss:MergeAcross="${dayCount + 7}" ss:StyleID="Section"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>"""
+private fun sectionRow(title: String, totalColumns: Int): String =
+    """<Row><Cell ss:MergeAcross="${totalColumns - 1}" ss:StyleID="Section"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>"""
 
 private fun nameCell(value: String): String =
     """<Cell ss:StyleID="NameCell"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
-
-private fun noteCell(value: String): String =
-    """<Cell ss:StyleID="NoteCell"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
 
 private fun cell(value: String): String =
     """<Cell ss:StyleID="Cell"><Data ss:Type="String">${value.xml()}</Data></Cell>"""

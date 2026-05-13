@@ -635,6 +635,18 @@ Before export, run cleanup checks:
 - The spreadsheet export should now open as a valid workbook instead of being rejected as damaged.
 - A new APK should be copied to `Hospital Duty Roster APK/` for this fix.
 
+### Version 1.0.7
+
+- Added the confirmed TMO employee codes from the validated roster sample to the canonical staff list.
+- Preserved saved roster ordering so the export no longer falls back to alphabetical ordering.
+- Updated Excel export layout to better match the real roster sheet:
+  - TMO summary columns now follow the sample shape more closely with `N`, `CT1`, `CT2`, `OFF`, and `TOTAL DUTIES`
+  - HO rows no longer force the same summary values on the right
+  - operational notes are exported as plain rows between TMOs and HOs instead of a separate labeled block
+  - the OPD block stays on the same worksheet
+  - footer signature lines are included again
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.

@@ -37,6 +37,7 @@ data class StaffMember(
     val employeeCode: String = "",
     val staffType: StaffType,
     val section: TmoSection? = null,
+    val displayOrder: Int = Int.MAX_VALUE,
     val experienceLevel: ExperienceLevel = ExperienceLevel.MID,
     val ct2Eligible: Boolean = true,
     val reducedNights: Boolean = false,
@@ -57,8 +58,7 @@ data class PreviewRow(
     val staffId: String = "",
     val label: String,
     val badge: String = "",
-    val cells: List<String>,
-    val summary: String = ""
+    val cells: List<String>
 )
 
 data class OpdTrack(
@@ -100,9 +100,9 @@ fun buildRoster(request: RosterRequest): RosterPreview {
     val days = buildRosterDays(request.rosterMonth)
     val includedStaff = request.staff
         .filter { it.active && it.id in request.includedStaffIds }
-        .sortedWith(compareBy<StaffMember> { it.staffType.name }.thenBy { it.section?.name.orEmpty() }.thenBy { it.name })
+        .sortedForRoster()
     val tmos = includedStaff.filter { it.staffType == StaffType.TMO }
-    val hos = includedStaff.filter { it.staffType == StaffType.HO }.sortedBy { it.name }
+    val hos = includedStaff.filter { it.staffType == StaffType.HO }
     val cellsByStaff = includedStaff.associate { it.id to MutableList(days.size) { "" } }.toMutableMap()
 
     applyLeaves(days, cellsByStaff, request.leavesByStaffId)
@@ -125,11 +125,9 @@ fun buildRoster(request: RosterRequest): RosterPreview {
 
     val wardRows = tmos
         .filter { it.section == TmoSection.WARD }
-        .sortedBy { it.name }
         .map { it.toPreviewRow(cellsByStaff.getValue(it.id)) }
     val nurseryRows = tmos
         .filter { it.section == TmoSection.NURSERY }
-        .sortedBy { it.name }
         .map { it.toPreviewRow(cellsByStaff.getValue(it.id)) }
     val hoRows = hos.map { it.toPreviewRow(cellsByStaff.getValue(it.id)) }
     val opdTracks = buildOpdTracks(days, includedStaff, cellsByStaff)
@@ -354,8 +352,8 @@ private fun buildOpdTracks(
     cellsByStaff: Map<String, MutableList<String>>
 ): List<OpdTrack> {
     val opdDayIndexes = days.indices.filter { days[it].date.dayOfWeek !in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) }
-    val seniorTmos = staff.filter { it.staffType == StaffType.TMO && it.opdCategory == OpdCategory.SENIOR }
-    val hoAndNew = staff.filter { it.staffType == StaffType.HO || it.opdCategory == OpdCategory.NEW_TMO }
+    val seniorTmos = staff.filter { it.staffType == StaffType.TMO && it.opdCategory == OpdCategory.SENIOR }.sortedForRoster()
+    val hoAndNew = staff.filter { it.staffType == StaffType.HO || it.opdCategory == OpdCategory.NEW_TMO }.sortedForRoster()
 
     fun assignmentFor(pool: List<StaffMember>, index: Int): String {
         if (pool.isEmpty()) return ""
@@ -380,20 +378,26 @@ private fun buildOpdTracks(
 }
 
 private fun StaffMember.toPreviewRow(cells: List<String>): PreviewRow {
-    val n = countCode(cells, "N")
-    val ct1 = countCode(cells, "CT1")
-    val ct2 = countCode(cells, "CT2")
-    val off = countCode(cells, "O")
-    val leave = countCode(cells, "L")
-    val hard = n + ct1 + ct2
     return PreviewRow(
         staffId = id,
         label = name,
         badge = if (staffType == StaffType.TMO) employeeCode else "",
-        cells = cells,
-        summary = "N $n  CT1 $ct1  CT2 $ct2  O $off  L $leave  Total $hard"
+        cells = cells
     )
 }
+
+fun List<StaffMember>.sortedForRoster(): List<StaffMember> = sortedWith(
+    compareBy<StaffMember>(
+        { if (it.staffType == StaffType.TMO) 0 else 1 },
+        { when (it.section) {
+            TmoSection.WARD -> 0
+            TmoSection.NURSERY -> 1
+            null -> 2
+        } },
+        { it.displayOrder },
+        { it.name }
+    )
+)
 
 private fun canAssign(cellsByStaff: Map<String, MutableList<String>>, staffId: String, dayIndex: Int): Boolean =
     cellsByStaff.getValue(staffId)[dayIndex].isBlank()

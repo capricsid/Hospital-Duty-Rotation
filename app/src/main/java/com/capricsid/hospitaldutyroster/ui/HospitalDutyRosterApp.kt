@@ -83,6 +83,7 @@ import com.capricsid.hospitaldutyroster.model.TmoSection
 import com.capricsid.hospitaldutyroster.model.buildRoster
 import com.capricsid.hospitaldutyroster.model.defaultExportFileName
 import com.capricsid.hospitaldutyroster.model.parseLeaveDates
+import com.capricsid.hospitaldutyroster.model.sortedForRoster
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
@@ -95,7 +96,7 @@ private enum class AppTab(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HospitalDutyRosterApp(repository: StaffRepository) {
-    val loadedStaff = remember { repository.loadStaff().sortedBy { it.name } }
+    val loadedStaff = remember { repository.loadStaff().sortedForRoster() }
     val staff = remember { mutableStateListOf<StaffMember>().apply { addAll(loadedStaff) } }
 
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.STAFF) }
@@ -141,7 +142,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
 
     fun saveStaff(updated: List<StaffMember>) {
         staff.clear()
-        staff.addAll(updated.sortedBy { it.name })
+        staff.addAll(updated.sortedForRoster())
         staff.forEach { member ->
             includedStaff.putIfAbsent(member.id, member.active)
             leaveEnabled.putIfAbsent(member.id, false)
@@ -157,7 +158,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.6 - Excel export corruption fix",
+                            text = "v1.0.7 - Excel fidelity update",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -240,7 +241,9 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                 if (existingIndex >= 0) {
                     updated[existingIndex] = member
                 } else {
-                    updated += member
+                    updated += member.copy(
+                        displayOrder = (staff.maxOfOrNull { it.displayOrder } ?: -1) + 1
+                    )
                 }
                 saveStaff(updated)
                 showEditor = false
@@ -549,7 +552,7 @@ private fun DoctorSelectionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
-            staff.sortedWith(compareBy<StaffMember> { it.staffType.name }.thenBy { it.section?.name.orEmpty() }.thenBy { it.name })
+            staff.sortedForRoster()
                 .forEach { member ->
                     DoctorRosterInputRow(
                         member = member,
@@ -690,7 +693,11 @@ private fun HeaderRow(preview: RosterPreview) {
             preview.days.forEach { day ->
                 PreviewCell(day.dayLabel, 56.dp, true)
             }
-            PreviewCell("NOTES", 180.dp, true)
+            PreviewCell("N", 48.dp, true)
+            PreviewCell("CT1", 52.dp, true)
+            PreviewCell("CT2", 52.dp, true)
+            PreviewCell("OFF", 52.dp, true)
+            PreviewCell("TOTAL", 64.dp, true)
         }
         Row {
             PreviewCell("", 140.dp, false)
@@ -698,7 +705,11 @@ private fun HeaderRow(preview: RosterPreview) {
             preview.days.forEach { day ->
                 PreviewCell(day.dayNumber, 56.dp, false)
             }
-            PreviewCell("Rule bands and flags", 180.dp, false)
+            PreviewCell("N", 48.dp, false)
+            PreviewCell("CT1", 52.dp, false)
+            PreviewCell("CT2", 52.dp, false)
+            PreviewCell("OFF", 52.dp, false)
+            PreviewCell("TOTAL", 64.dp, false)
         }
     }
 }
@@ -722,13 +733,28 @@ private fun SectionHeaderRow(title: String) {
 
 @Composable
 private fun PreviewDataRow(row: PreviewRow) {
+    val summary = row.cells.let { cells ->
+        val nights = cells.count { it == "N" }
+        val ct1 = cells.count { it == "CT1" }
+        val ct2 = cells.count { it == "CT2" }
+        val off = cells.count { it == "O" }
+        val total = nights + ct1 + ct2
+        listOf(nights.toString(), ct1.toString(), ct2.toString(), off.toString(), total.toString())
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         PreviewCell(row.label, 140.dp, false)
         PreviewCell(row.badge, 90.dp, false)
         row.cells.forEach { cell ->
             PreviewCell(cell, 56.dp, false)
         }
-        PreviewCell(row.summary, 180.dp, false)
+        summary.forEachIndexed { index, value ->
+            val width = when (index) {
+                0 -> 48.dp
+                4 -> 64.dp
+                else -> 52.dp
+            }
+            PreviewCell(value, width, false)
+        }
     }
 }
 
@@ -825,6 +851,7 @@ private fun StaffEditorDialog(
                                 employeeCode = employeeCode.trim(),
                                 staffType = staffType,
                                 section = if (staffType == StaffType.TMO) section else null,
+                                displayOrder = initial?.displayOrder ?: Int.MAX_VALUE,
                                 experienceLevel = experienceLevel,
                                 ct2Eligible = ct2Eligible,
                                 reducedNights = reducedNights,

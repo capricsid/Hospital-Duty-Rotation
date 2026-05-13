@@ -6,6 +6,7 @@ import com.capricsid.hospitaldutyroster.model.OpdCategory
 import com.capricsid.hospitaldutyroster.model.StaffMember
 import com.capricsid.hospitaldutyroster.model.StaffType
 import com.capricsid.hospitaldutyroster.model.TmoSection
+import com.capricsid.hospitaldutyroster.model.sortedForRoster
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -26,7 +27,7 @@ class StaffRepository(context: Context) {
         return if (preferences.getInt(KEY_STAFF_VERSION, 0) < CURRENT_STAFF_VERSION) {
             migrateToCurrentStaff(loaded).also { saveStaff(it) }
         } else {
-            loaded
+            loaded.sortedForRoster()
         }
     }
 
@@ -51,31 +52,38 @@ class StaffRepository(context: Context) {
                 canonical.copy(
                     id = saved.id,
                     employeeCode = saved.employeeCode.ifBlank { canonical.employeeCode },
+                    displayOrder = saved.displayOrder.takeIf { it != Int.MAX_VALUE } ?: canonical.displayOrder,
                     active = saved.active
                 )
             }
-        }
+        }.sortedForRoster()
     }
 
     private fun canonicalStaff(): List<StaffMember> = listOf(
         StaffMember(
             name = "ISMAIL",
+            employeeCode = "11215",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 0,
             experienceLevel = ExperienceLevel.SENIOR,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
             name = "IHSAN",
+            employeeCode = "11180",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 1,
             experienceLevel = ExperienceLevel.SENIOR,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
             name = "AIMAN",
+            employeeCode = "11071",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 2,
             experienceLevel = ExperienceLevel.SENIOR,
             ct2Eligible = false,
             reducedNights = true,
@@ -83,90 +91,112 @@ class StaffRepository(context: Context) {
         ),
         StaffMember(
             name = "SULAIMAN",
+            employeeCode = "12191",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 3,
             experienceLevel = ExperienceLevel.MID
         ),
         StaffMember(
             name = "IZAZ",
+            employeeCode = "12634",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 4,
             experienceLevel = ExperienceLevel.JUNIOR,
             reducedNights = true,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "ASIM",
+            employeeCode = "13108",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 5,
             experienceLevel = ExperienceLevel.JUNIOR,
             reducedNights = true,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "IHTESHAM",
+            employeeCode = "13014",
             staffType = StaffType.TMO,
             section = TmoSection.WARD,
+            displayOrder = 6,
             experienceLevel = ExperienceLevel.JUNIOR,
             reducedNights = true,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "ABBAS",
+            employeeCode = "11219",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 7,
             experienceLevel = ExperienceLevel.SENIOR,
             weekendPreferenceOff = true,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
             name = "ROMAN",
+            employeeCode = "11220",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 8,
             experienceLevel = ExperienceLevel.SENIOR,
             weekendPreferenceOff = true,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
             name = "WASEEM",
+            employeeCode = "11179",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 9,
             experienceLevel = ExperienceLevel.SENIOR,
             opdCategory = OpdCategory.SENIOR
         ),
         StaffMember(
             name = "UMER",
+            employeeCode = "12613",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 10,
             experienceLevel = ExperienceLevel.MID
         ),
         StaffMember(
             name = "HASSAN",
+            employeeCode = "12635",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 11,
             experienceLevel = ExperienceLevel.JUNIOR,
             reducedNights = true,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "ATEEQ",
+            employeeCode = "13020",
             staffType = StaffType.TMO,
             section = TmoSection.NURSERY,
+            displayOrder = 12,
             experienceLevel = ExperienceLevel.JUNIOR,
             reducedNights = true,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "GOHAR",
+            displayOrder = 13,
             staffType = StaffType.HO,
             opdCategory = OpdCategory.NEW_TMO
         ),
         StaffMember(
             name = "OWAIS",
+            displayOrder = 14,
             staffType = StaffType.HO,
             opdCategory = OpdCategory.NEW_TMO
         )
-    )
+    ).sortedForRoster()
 
     private fun StaffMember.toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -174,6 +204,7 @@ class StaffRepository(context: Context) {
         put("employeeCode", employeeCode)
         put("staffType", staffType.name)
         put("section", section?.name)
+        put("displayOrder", displayOrder)
         put("experienceLevel", experienceLevel.name)
         put("ct2Eligible", ct2Eligible)
         put("reducedNights", reducedNights)
@@ -188,6 +219,7 @@ class StaffRepository(context: Context) {
         employeeCode = optString("employeeCode"),
         staffType = StaffType.valueOf(optString("staffType", StaffType.TMO.name)),
         section = optString("section").takeIf { it.isNotBlank() }?.let { TmoSection.valueOf(it) },
+        displayOrder = optInt("displayOrder", Int.MAX_VALUE),
         experienceLevel = ExperienceLevel.valueOf(optString("experienceLevel", ExperienceLevel.MID.name)),
         ct2Eligible = optBoolean("ct2Eligible", true),
         reducedNights = optBoolean("reducedNights", false),
@@ -199,7 +231,7 @@ class StaffRepository(context: Context) {
     private companion object {
         const val KEY_STAFF = "master_staff"
         const val KEY_STAFF_VERSION = "master_staff_version"
-        const val CURRENT_STAFF_VERSION = 2
+        const val CURRENT_STAFF_VERSION = 3
     }
 }
 
