@@ -3,14 +3,45 @@ package com.capricsid.hospitaldutyroster.data
 import com.capricsid.hospitaldutyroster.model.PreviewRow
 import com.capricsid.hospitaldutyroster.model.RosterPreview
 import java.io.OutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class RosterExcelExporter {
     fun export(preview: RosterPreview, outputStream: OutputStream) {
-        outputStream.writer(Charsets.UTF_8).use { writer ->
-            writer.write(preview.toSpreadsheetXml())
+        ZipOutputStream(outputStream).use { zip ->
+            zip.writeEntry("[Content_Types].xml", contentTypesXml())
+            zip.writeEntry("_rels/.rels", packageRelsXml())
+            zip.writeEntry("docProps/app.xml", appPropertiesXml())
+            zip.writeEntry("docProps/core.xml", corePropertiesXml())
+            zip.writeEntry("xl/workbook.xml", workbookXml())
+            zip.writeEntry("xl/_rels/workbook.xml.rels", workbookRelsXml())
+            zip.writeEntry("xl/styles.xml", stylesXml())
+            zip.writeEntry("xl/worksheets/sheet1.xml", preview.toWorksheetXml())
         }
     }
 }
+
+private enum class XlsxStyle(val id: Int) {
+    Default(0),
+    Title(1),
+    Header(2),
+    Section(3),
+    Cell(4),
+    NameCell(5),
+    Note(6),
+    Signature(7)
+}
+
+private data class XlsxCell(
+    val value: String = "",
+    val style: XlsxStyle = XlsxStyle.Cell,
+    val columnSpan: Int = 1
+)
+
+private data class XlsxRow(
+    val cells: List<XlsxCell>,
+    val height: Int? = null
+)
 
 private data class SummaryCounts(
     val nights: Int,
@@ -34,208 +65,273 @@ private fun PreviewRow.summaryCounts(): SummaryCounts {
     )
 }
 
-private fun RosterPreview.toSpreadsheetXml(): String = buildString {
-    val summaryColumnCount = 5
-    val totalColumns = 2 + days.size + summaryColumnCount
-    val mergeAcross = totalColumns - 1
+private fun RosterPreview.toWorksheetXml(): String {
+    val rows = buildRows()
+    val mergeRefs = mutableListOf<String>()
+    val maxColumns = 2 + days.size + SummaryColumnCount
 
-    appendLine("""<?xml version="1.0"?>""")
-    appendLine("""<?mso-application progid="Excel.Sheet"?>""")
-    appendLine(
-        """<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" """ +
-            """xmlns:o="urn:schemas-microsoft-com:office:office" """ +
-            """xmlns:x="urn:schemas-microsoft-com:office:excel" """ +
-            """xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" """ +
-            """xmlns:html="http://www.w3.org/TR/REC-html40">"""
-    )
-    appendStyles()
-    appendLine("""<Worksheet ss:Name="Roster">""")
-    appendLine("<Table>")
-
-    appendLine("""<Column ss:Width="120"/>""")
-    appendLine("""<Column ss:Width="58"/>""")
-    repeat(days.size) { appendLine("""<Column ss:Width="30"/>""") }
-    appendLine("""<Column ss:Width="36"/>""")
-    appendLine("""<Column ss:Width="40"/>""")
-    appendLine("""<Column ss:Width="40"/>""")
-    appendLine("""<Column ss:Width="40"/>""")
-    appendLine("""<Column ss:Width="68"/>""")
-
-    appendLine("""<Row ss:Height="32"><Cell ss:MergeAcross="$mergeAcross" ss:StyleID="Title"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>""")
-
-    appendHeaderRows(this)
-    appendSection(this, "WARD TMOS", wardRows, includeSummary = true)
-    appendSection(this, "NURSERY TMOS", nurseryRows, includeSummary = true)
-    appendBlankRow(totalColumns)
-    appendNotesSection(this, totalColumns)
-    appendBlankRow(totalColumns)
-    appendSection(this, "HOUSE OFFICER", hoRows, includeSummary = false)
-    appendBlankRow(totalColumns)
-    appendOpdSection(this, summaryColumnCount)
-    appendBlankRow(totalColumns)
-    appendBlankRow(totalColumns)
-    appendSignatureRow(totalColumns)
-
-    appendLine("</Table>")
-    appendLine("</Worksheet>")
-    appendLine("</Workbook>")
-}
-
-private fun StringBuilder.appendStyles() {
-    appendLine("<Styles>")
-    appendLine("""<Style ss:ID="Title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1" ss:Size="14"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#EAF2D3" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Section"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#D9EAD3" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Cell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="NameCell"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="MergedNote"><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")
-    appendLine("""<Style ss:ID="Signature"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/><Font ss:Bold="1"/></Style>""")
-    appendLine("</Styles>")
-}
-
-private fun RosterPreview.appendHeaderRows(builder: StringBuilder) {
-    builder.append("""<Row>""")
-    builder.append(headerCell("NAME"))
-    builder.append(headerCell("E.CODE"))
-    days.forEach { day -> builder.append(headerCell(day.dayLabel)) }
-    builder.append(headerCell("N"))
-    builder.append(headerCell("CT1"))
-    builder.append(headerCell("CT2"))
-    builder.append(headerCell("OFF"))
-    builder.append(headerCell("TOTAL DUTIES"))
-    builder.appendLine("</Row>")
-
-    builder.append("""<Row>""")
-    builder.append(headerCell(""))
-    builder.append(headerCell(""))
-    days.forEach { day -> builder.append(headerCell(day.dayNumber)) }
-    builder.append(headerCell("N"))
-    builder.append(headerCell("CT1"))
-    builder.append(headerCell("CT2"))
-    builder.append(headerCell("OFF"))
-    builder.append(headerCell("TOTAL"))
-    builder.appendLine("</Row>")
-}
-
-private fun RosterPreview.appendSection(
-    builder: StringBuilder,
-    title: String,
-    rows: List<PreviewRow>,
-    includeSummary: Boolean
-) {
-    builder.appendLine(sectionRow(title, 2 + days.size + 5))
-    rows.forEach { row ->
-        val summary = row.summaryCounts()
-        builder.append("""<Row>""")
-        builder.append(nameCell(row.label))
-        builder.append(cell(row.badge))
-        row.cells.forEach { duty -> builder.append(cell(duty)) }
-        if (includeSummary) {
-            builder.append(cell(summary.nights.toString()))
-            builder.append(cell(summary.ct1.toString()))
-            builder.append(cell(summary.ct2.toString()))
-            builder.append(cell(summary.off.toString()))
-            builder.append(cell(summary.totalDuties.toString()))
-        } else {
-            repeat(5) { builder.append(cell("")) }
+    return buildString {
+        appendLine("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
+        appendLine("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">""")
+        appendLine("""<sheetViews><sheetView workbookViewId="0"/></sheetViews>""")
+        appendLine("""<sheetFormatPr defaultRowHeight="15"/>""")
+        appendColumns(maxColumns)
+        appendLine("<sheetData>")
+        rows.forEachIndexed { rowIndex, row ->
+            val rowNumber = rowIndex + 1
+            val height = row.height?.let { """ ht="$it" customHeight="1"""" }.orEmpty()
+            append("""<row r="$rowNumber"$height>""")
+            var column = 1
+            row.cells.forEach { cell ->
+                val ref = "${columnName(column)}$rowNumber"
+                append(xlsxCell(ref, cell))
+                if (cell.columnSpan > 1) {
+                    mergeRefs += "$ref:${columnName(column + cell.columnSpan - 1)}$rowNumber"
+                }
+                column += cell.columnSpan
+            }
+            appendLine("</row>")
         }
-        builder.appendLine("</Row>")
+        appendLine("</sheetData>")
+        if (mergeRefs.isNotEmpty()) {
+            appendLine("""<mergeCells count="${mergeRefs.size}">""")
+            mergeRefs.forEach { ref -> appendLine("""<mergeCell ref="$ref"/>""") }
+            appendLine("</mergeCells>")
+        }
+        appendLine("""<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>""")
+        appendLine("</worksheet>")
     }
 }
 
-private fun RosterPreview.appendNotesSection(builder: StringBuilder, totalColumns: Int) {
+private fun RosterPreview.buildRows(): List<XlsxRow> {
+    val totalColumns = 2 + days.size + SummaryColumnCount
+    val rows = mutableListOf<XlsxRow>()
+
+    rows += XlsxRow(
+        cells = listOf(XlsxCell(title, XlsxStyle.Title, totalColumns)),
+        height = 32
+    )
+    rows += XlsxRow(
+        cells = listOf(XlsxCell("NAME", XlsxStyle.Header), XlsxCell("E.CODE", XlsxStyle.Header)) +
+            days.map { XlsxCell(it.dayLabel, XlsxStyle.Header) } +
+            listOf(
+                XlsxCell("N", XlsxStyle.Header),
+                XlsxCell("CT1", XlsxStyle.Header),
+                XlsxCell("CT2", XlsxStyle.Header),
+                XlsxCell("OFF", XlsxStyle.Header),
+                XlsxCell("TOTAL DUTIES", XlsxStyle.Header)
+            )
+    )
+    rows += XlsxRow(
+        cells = listOf(XlsxCell("", XlsxStyle.Header), XlsxCell("", XlsxStyle.Header)) +
+            days.map { XlsxCell(it.dayNumber, XlsxStyle.Header) } +
+            listOf(
+                XlsxCell("N", XlsxStyle.Header),
+                XlsxCell("CT1", XlsxStyle.Header),
+                XlsxCell("CT2", XlsxStyle.Header),
+                XlsxCell("OFF", XlsxStyle.Header),
+                XlsxCell("TOTAL", XlsxStyle.Header)
+            )
+    )
+
+    rows.addSection("WARD TMOS", wardRows, includeSummary = true, totalColumns = totalColumns)
+    rows.addSection("NURSERY TMOS", nurseryRows, includeSummary = true, totalColumns = totalColumns)
+    rows += blankRow(totalColumns)
     notes.forEach { note ->
-        builder.appendLine(
-            """<Row><Cell ss:MergeAcross="${totalColumns - 1}" ss:StyleID="MergedNote"><Data ss:Type="String">${note.xml()}</Data></Cell></Row>"""
+        rows += XlsxRow(listOf(XlsxCell(note, XlsxStyle.Note, totalColumns)))
+    }
+    rows += blankRow(totalColumns)
+    rows.addSection("HOUSE OFFICER", hoRows, includeSummary = false, totalColumns = totalColumns)
+    rows += blankRow(totalColumns)
+    rows.addOpdRows(this, totalColumns)
+    rows += blankRow(totalColumns)
+    rows += blankRow(totalColumns)
+    rows += XlsxRow(
+        listOf(
+            XlsxCell("DMC SIGNATURE: _______________________", XlsxStyle.Signature, totalColumns / 2),
+            XlsxCell("REGISTRAR SIGNATURE: ____________________", XlsxStyle.Signature, totalColumns - totalColumns / 2)
+        )
+    )
+
+    return rows
+}
+
+private fun MutableList<XlsxRow>.addSection(
+    title: String,
+    previewRows: List<PreviewRow>,
+    includeSummary: Boolean,
+    totalColumns: Int
+) {
+    this += XlsxRow(listOf(XlsxCell(title, XlsxStyle.Section, totalColumns)))
+    previewRows.forEach { row ->
+        val summary = row.summaryCounts()
+        this += XlsxRow(
+            cells = listOf(XlsxCell(row.label, XlsxStyle.NameCell), XlsxCell(row.badge, XlsxStyle.Cell)) +
+                row.cells.map { XlsxCell(it, XlsxStyle.Cell) } +
+                if (includeSummary) {
+                    listOf(
+                        XlsxCell(summary.nights.toString(), XlsxStyle.Cell),
+                        XlsxCell(summary.ct1.toString(), XlsxStyle.Cell),
+                        XlsxCell(summary.ct2.toString(), XlsxStyle.Cell),
+                        XlsxCell(summary.off.toString(), XlsxStyle.Cell),
+                        XlsxCell(summary.totalDuties.toString(), XlsxStyle.Cell)
+                    )
+                } else {
+                    List(SummaryColumnCount) { XlsxCell("", XlsxStyle.Cell) }
+                }
         )
     }
 }
 
-private fun RosterPreview.appendOpdSection(builder: StringBuilder, summaryColumnCount: Int) {
-    val opdDateLabels = opdTracks.flatMap { it.dates }.distinct()
-    val firstBlock = opdDateLabels.take(14).toSet()
-    val secondBlock = opdDateLabels.drop(14).toSet()
+private fun MutableList<XlsxRow>.addOpdRows(preview: RosterPreview, totalColumns: Int) {
+    val opdDateLabels = preview.opdTracks.flatMap { it.dates }.distinct()
+    val blocks = listOf(opdDateLabels.take(14), opdDateLabels.drop(14)).filter { it.isNotEmpty() }
 
-    appendOpdBlock(builder, "OPD ROSTER", firstBlock, summaryColumnCount)
-    if (secondBlock.isNotEmpty()) {
-        builder.appendLine("""<Row><Cell ss:MergeAcross="${2 + days.size + summaryColumnCount - 1}" ss:StyleID="Cell"><Data ss:Type="String"></Data></Cell></Row>""")
-        appendOpdBlock(builder, "OPD ROSTER", secondBlock, summaryColumnCount)
+    blocks.forEachIndexed { blockIndex, block ->
+        if (blockIndex > 0) this += blankRow(totalColumns)
+        addOpdBlock(preview, block, totalColumns)
     }
 }
 
-private fun RosterPreview.appendOpdBlock(
-    builder: StringBuilder,
-    title: String,
-    opdDateLabels: Set<String>,
-    summaryColumnCount: Int
+private fun MutableList<XlsxRow>.addOpdBlock(
+    preview: RosterPreview,
+    opdDateLabels: List<String>,
+    totalColumns: Int
 ) {
-    builder.appendLine(sectionRow(title, 2 + days.size + summaryColumnCount))
+    val daysByLabel = preview.days.associateBy { "${it.dayLabel} ${it.dayNumber}" }
+    val usedColumns = 1 + opdDateLabels.size * OpdDateColumnSpan
+    val trailing = (totalColumns - usedColumns).coerceAtLeast(0)
 
-    builder.append("""<Row>""")
-    builder.append(cell(""))
-    builder.append(cell(""))
-    days.forEach { day ->
-        val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in opdDateLabels) day.dayLabel else ""))
-    }
-    repeat(summaryColumnCount) { builder.append(cell("")) }
-    builder.appendLine("</Row>")
-
-    builder.append("""<Row>""")
-    builder.append(cell(""))
-    builder.append(cell(""))
-    days.forEach { day ->
-        val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in opdDateLabels) day.dayNumber else ""))
-    }
-    repeat(summaryColumnCount) { builder.append(cell("")) }
-    builder.appendLine("</Row>")
-
-    opdTracks.forEach { track ->
-        val assignmentsByDate = track.dates.zip(track.assignments)
-            .filter { (dateLabel, _) -> dateLabel in opdDateLabels }
-            .toMap()
-        builder.append("""<Row>""")
-        builder.append(nameCell(track.label))
-        builder.append(cell(""))
-        days.forEach { day ->
-            val key = "${day.dayLabel} ${day.dayNumber}"
-            builder.append(cell(assignmentsByDate[key].orEmpty()))
-        }
-        repeat(summaryColumnCount) { builder.append(cell("")) }
-        builder.appendLine("</Row>")
-    }
-}
-
-private fun StringBuilder.appendBlankRow(totalColumns: Int) {
-    append("""<Row>""")
-    repeat(totalColumns) { append(cell("")) }
-    appendLine("</Row>")
-}
-
-private fun StringBuilder.appendSignatureRow(totalColumns: Int) {
-    val registrarStartIndex = totalColumns / 2 + 1
-    val firstMergeAcross = registrarStartIndex - 2
-    val secondMergeAcross = totalColumns - registrarStartIndex
-    appendLine(
-        """<Row><Cell ss:MergeAcross="$firstMergeAcross" ss:StyleID="Signature"><Data ss:Type="String">DMC SIGNATURE: _______________________</Data></Cell><Cell ss:Index="$registrarStartIndex" ss:MergeAcross="$secondMergeAcross" ss:StyleID="Signature"><Data ss:Type="String">REGISTRAR SIGNATURE: ____________________</Data></Cell></Row>"""
+    this += XlsxRow(listOf(XlsxCell("OPD ROSTER", XlsxStyle.Section, totalColumns)))
+    this += XlsxRow(
+        cells = listOf(XlsxCell("", XlsxStyle.Cell)) +
+            opdDateLabels.map { XlsxCell(daysByLabel[it]?.dayLabel.orEmpty(), XlsxStyle.Header, OpdDateColumnSpan) } +
+            List(trailing) { XlsxCell("", XlsxStyle.Cell) }
     )
+    this += XlsxRow(
+        cells = listOf(XlsxCell("", XlsxStyle.Cell)) +
+            opdDateLabels.map { XlsxCell(daysByLabel[it]?.dayNumber.orEmpty(), XlsxStyle.Header, OpdDateColumnSpan) } +
+            List(trailing) { XlsxCell("", XlsxStyle.Cell) }
+    )
+    preview.opdTracks.forEach { track ->
+        val assignmentsByDate = track.dates.zip(track.assignments).toMap()
+        this += XlsxRow(
+            cells = listOf(XlsxCell(track.label, XlsxStyle.NameCell)) +
+                opdDateLabels.map { XlsxCell(assignmentsByDate[it].orEmpty(), XlsxStyle.Cell, OpdDateColumnSpan) } +
+                List(trailing) { XlsxCell("", XlsxStyle.Cell) }
+        )
+    }
 }
 
-private fun headerCell(value: String): String =
-    """<Cell ss:StyleID="Header"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
+private fun blankRow(totalColumns: Int): XlsxRow =
+    XlsxRow(List(totalColumns) { XlsxCell("", XlsxStyle.Cell) })
 
-private fun sectionRow(title: String, totalColumns: Int): String =
-    """<Row><Cell ss:MergeAcross="${totalColumns - 1}" ss:StyleID="Section"><Data ss:Type="String">${title.xml()}</Data></Cell></Row>"""
+private fun StringBuilder.appendColumns(maxColumns: Int) {
+    appendLine("<cols>")
+    appendLine("""<col min="1" max="1" width="18" customWidth="1"/>""")
+    appendLine("""<col min="2" max="2" width="9" customWidth="1"/>""")
+    appendLine("""<col min="3" max="${2 + 31}" width="5" customWidth="1"/>""")
+    appendLine("""<col min="34" max="37" width="7" customWidth="1"/>""")
+    appendLine("""<col min="38" max="$maxColumns" width="13" customWidth="1"/>""")
+    appendLine("</cols>")
+}
 
-private fun nameCell(value: String): String =
-    """<Cell ss:StyleID="NameCell"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
+private fun xlsxCell(ref: String, cell: XlsxCell): String {
+    val style = cell.style.id
+    if (cell.value.isBlank()) {
+        return """<c r="$ref" s="$style"/>"""
+    }
+    return """<c r="$ref" s="$style" t="inlineStr"><is><t>${cell.value.xml()}</t></is></c>"""
+}
 
-private fun cell(value: String): String =
-    """<Cell ss:StyleID="Cell"><Data ss:Type="String">${value.xml()}</Data></Cell>"""
+private fun ZipOutputStream.writeEntry(path: String, content: String) {
+    putNextEntry(ZipEntry(path))
+    write(content.toByteArray(Charsets.UTF_8))
+    closeEntry()
+}
+
+private fun columnName(columnNumber: Int): String {
+    var number = columnNumber
+    val name = StringBuilder()
+    while (number > 0) {
+        val remainder = (number - 1) % 26
+        name.insert(0, ('A'.code + remainder).toChar())
+        number = (number - 1) / 26
+    }
+    return name.toString()
+}
+
+private fun contentTypesXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+private fun packageRelsXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>"""
+
+private fun workbookXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Roster" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"""
+
+private fun workbookRelsXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+private fun appPropertiesXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+<Application>Hospital Duty Roster</Application>
+</Properties>"""
+
+private fun corePropertiesXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<dc:creator>Hospital Duty Roster</dc:creator>
+<cp:lastModifiedBy>Hospital Duty Roster</cp:lastModifiedBy>
+</cp:coreProperties>"""
+
+private fun stylesXml(): String =
+    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF2D3"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAD3"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 private fun String.xml(): String = replace("&", "&amp;")
     .replace("<", "&lt;")
     .replace(">", "&gt;")
     .replace("\"", "&quot;")
     .replace("'", "&apos;")
+
+private const val SummaryColumnCount = 5
+private const val OpdDateColumnSpan = 2

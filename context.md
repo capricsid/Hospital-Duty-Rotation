@@ -654,6 +654,19 @@ Before export, run cleanup checks:
 - Split OPD export into smaller same-sheet OPD blocks so the layout reads closer to the reference workbook instead of one long compact strip.
 - A new APK should be copied to `Hospital Duty Roster APK/` for this release.
 
+### Version 1.0.9
+
+- Updated OPD export formatting to use merged date and assignment cells inside the same-sheet OPD blocks.
+- The OPD section now visually follows the reference workbook more closely while preserving generated OPD assignments.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
+### Version 1.0.10
+
+- Replaced the old XML Spreadsheet `.xls` export with a real `.xlsx` workbook package.
+- Updated the Android document picker MIME type and default export filename to `.xlsx`.
+- This should remove Excel's warning that the file format and extension do not match.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.

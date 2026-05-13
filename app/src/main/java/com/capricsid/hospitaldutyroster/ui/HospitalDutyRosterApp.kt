@@ -158,7 +158,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.8 - HO and OPD layout fix",
+                            text = "v1.0.10 - Real XLSX export",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -388,7 +388,7 @@ private fun RosterScreen(
     val exporter = remember { RosterExcelExporter() }
     var pendingExport by remember { mutableStateOf<RosterPreview?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/vnd.ms-excel")
+        contract = ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     ) { uri ->
         val roster = pendingExport
         if (uri != null && roster != null) {

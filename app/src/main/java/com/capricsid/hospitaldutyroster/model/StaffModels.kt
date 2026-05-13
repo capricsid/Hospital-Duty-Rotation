@@ -181,7 +181,7 @@ private fun parseSingleDate(input: String, rosterMonth: YearMonth): LocalDate? {
 }
 
 fun defaultExportFileName(rosterMonth: YearMonth): String =
-    "hospital-duty-roster-${rosterMonth.month.name.lowercase()}-${rosterMonth.year}.xls"
+    "hospital-duty-roster-${rosterMonth.month.name.lowercase()}-${rosterMonth.year}.xlsx"
 
 private fun buildRosterDays(rosterMonth: YearMonth): List<RosterDay> {
     val start = rosterMonth.atDay(24)
