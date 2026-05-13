@@ -152,15 +152,31 @@ private fun RosterPreview.appendNotesSection(builder: StringBuilder, totalColumn
 }
 
 private fun RosterPreview.appendOpdSection(builder: StringBuilder, summaryColumnCount: Int) {
-    builder.appendLine(sectionRow("OPD ROSTER", 2 + days.size + summaryColumnCount))
+    val opdDateLabels = opdTracks.flatMap { it.dates }.distinct()
+    val firstBlock = opdDateLabels.take(14).toSet()
+    val secondBlock = opdDateLabels.drop(14).toSet()
 
-    val allOpdDateLabels = opdTracks.flatMap { it.dates }.toSet()
+    appendOpdBlock(builder, "OPD ROSTER", firstBlock, summaryColumnCount)
+    if (secondBlock.isNotEmpty()) {
+        builder.appendLine("""<Row><Cell ss:MergeAcross="${2 + days.size + summaryColumnCount - 1}" ss:StyleID="Cell"><Data ss:Type="String"></Data></Cell></Row>""")
+        appendOpdBlock(builder, "OPD ROSTER", secondBlock, summaryColumnCount)
+    }
+}
+
+private fun RosterPreview.appendOpdBlock(
+    builder: StringBuilder,
+    title: String,
+    opdDateLabels: Set<String>,
+    summaryColumnCount: Int
+) {
+    builder.appendLine(sectionRow(title, 2 + days.size + summaryColumnCount))
+
     builder.append("""<Row>""")
     builder.append(cell(""))
     builder.append(cell(""))
     days.forEach { day ->
         val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in allOpdDateLabels) day.dayLabel else ""))
+        builder.append(headerCell(if (key in opdDateLabels) day.dayLabel else ""))
     }
     repeat(summaryColumnCount) { builder.append(cell("")) }
     builder.appendLine("</Row>")
@@ -170,13 +186,15 @@ private fun RosterPreview.appendOpdSection(builder: StringBuilder, summaryColumn
     builder.append(cell(""))
     days.forEach { day ->
         val key = "${day.dayLabel} ${day.dayNumber}"
-        builder.append(headerCell(if (key in allOpdDateLabels) day.dayNumber else ""))
+        builder.append(headerCell(if (key in opdDateLabels) day.dayNumber else ""))
     }
     repeat(summaryColumnCount) { builder.append(cell("")) }
     builder.appendLine("</Row>")
 
     opdTracks.forEach { track ->
-        val assignmentsByDate = track.dates.zip(track.assignments).toMap()
+        val assignmentsByDate = track.dates.zip(track.assignments)
+            .filter { (dateLabel, _) -> dateLabel in opdDateLabels }
+            .toMap()
         builder.append("""<Row>""")
         builder.append(nameCell(track.label))
         builder.append(cell(""))

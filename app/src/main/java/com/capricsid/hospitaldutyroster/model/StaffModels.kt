@@ -139,11 +139,8 @@ fun buildRoster(request: RosterRequest): RosterPreview {
         nurseryRows = nurseryRows,
         hoRows = hoRows,
         notes = listOf(
-            "Roster cycle runs from 24th of the selected month to 23rd of the next month.",
-            "M = Morning, E = Evening, N = Night, O = Off, L = Leave, CT1 = Morning + Evening, CT2 = Morning + Night.",
-            "Senior TMOs receive more nights; junior/reduced-night TMOs receive fewer nights and more CT1 duties where possible.",
-            "AIMAN is kept off CT2 by default. ABBAS and ROMAN are preferred off on weekends when staffing allows.",
-            "House Officers receive four CT1 duties per roster cycle."
+            "After night duty, TMOs and HOs can leave the ward next morning after carrying out round orders till 1pm.",
+            "Same apply for sundays. On CT2 duty, TMOs has to stay in ward till 3pm."
         ),
         opdTracks = opdTracks
     )
@@ -313,6 +310,11 @@ private fun assignHouseOfficerDuties(
     cellsByStaff: Map<String, MutableList<String>>
 ) {
     if (hos.isEmpty()) return
+    if (hos.size == 2) {
+        assignTwoHouseOfficerTemplate(days, hos, cellsByStaff)
+        return
+    }
+
     val ct1Counts = hos.associate { it.id to 0 }.toMutableMap()
     val ct1Target = 4
     val preferredCt1Days = days.indices.filter { days[it].isWeekend } + days.indices.filterNot { days[it].isWeekend }
@@ -337,6 +339,51 @@ private fun assignHouseOfficerDuties(
                 else -> "E"
             }
         }
+    }
+}
+
+private fun assignTwoHouseOfficerTemplate(
+    days: List<RosterDay>,
+    hos: List<StaffMember>,
+    cellsByStaff: Map<String, MutableList<String>>
+) {
+    val first = hos[0]
+    val second = hos[1]
+    val weekendDays = days.indices.filter { days[it].isWeekend }
+    val ct1WeekendDays = weekendDays.take(8)
+    var weekdayRotation = 0
+    var extraWeekendRotation = 0
+
+    days.indices.forEach { index ->
+        val firstCell = cellsByStaff.getValue(first.id)
+        val secondCell = cellsByStaff.getValue(second.id)
+
+        if (firstCell[index].isNotBlank() || secondCell[index].isNotBlank()) {
+            return@forEach
+        }
+
+        if (index in ct1WeekendDays) {
+            val ct1Owner = if (ct1WeekendDays.indexOf(index) % 2 == 0) first else second
+            val offOwner = if (ct1Owner.id == first.id) second else first
+            cellsByStaff.getValue(ct1Owner.id)[index] = "CT1"
+            cellsByStaff.getValue(offOwner.id)[index] = "O"
+            return@forEach
+        }
+
+        if (days[index].isWeekend) {
+            val morningOwner = if (extraWeekendRotation % 2 == 0) first else second
+            val offOwner = if (morningOwner.id == first.id) second else first
+            cellsByStaff.getValue(morningOwner.id)[index] = "M"
+            cellsByStaff.getValue(offOwner.id)[index] = "O"
+            extraWeekendRotation++
+            return@forEach
+        }
+
+        val morningOwner = if (weekdayRotation % 2 == 0) first else second
+        val eveningOwner = if (morningOwner.id == first.id) second else first
+        cellsByStaff.getValue(morningOwner.id)[index] = "M"
+        cellsByStaff.getValue(eveningOwner.id)[index] = "E"
+        weekdayRotation++
     }
 }
 

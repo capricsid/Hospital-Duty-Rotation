@@ -647,6 +647,13 @@ Before export, run cleanup checks:
   - footer signature lines are included again
 - A new APK should be copied to `Hospital Duty Roster APK/` for this release.
 
+### Version 1.0.8
+
+- Updated the 2-HO scheduling template so both house officers receive a balanced weekend `CT1/O` rotation and a more natural weekday `M/E` split.
+- Replaced generic exported rule notes with the two operational note lines used in the validated Excel roster style.
+- Split OPD export into smaller same-sheet OPD blocks so the layout reads closer to the reference workbook instead of one long compact strip.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.
