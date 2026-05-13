@@ -42,11 +42,13 @@ private fun RosterPreview.toSpreadsheetXml(): String = buildString {
 
     appendLine("""<?xml version="1.0"?>""")
     appendLine("""<?mso-application progid="Excel.Sheet"?>""")
-    appendLine("""<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"""")
-    appendLine(""" xmlns:o="urn:schemas-microsoft-com:office:office"""")
-    appendLine(""" xmlns:x="urn:schemas-microsoft-com:office:excel"""")
-    appendLine(""" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"""")
-    appendLine(""" xmlns:html="http://www.w3.org/TR/REC-html40">""")
+    appendLine(
+        """<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" """ +
+            """xmlns:o="urn:schemas-microsoft-com:office:office" """ +
+            """xmlns:x="urn:schemas-microsoft-com:office:excel" """ +
+            """xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" """ +
+            """xmlns:html="http://www.w3.org/TR/REC-html40">"""
+    )
     appendLine("<Styles>")
     appendLine("""<Style ss:ID="Title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1" ss:Size="14"/></Style>""")
     appendLine("""<Style ss:ID="Header"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:Bold="1"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>""")

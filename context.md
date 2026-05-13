@@ -627,6 +627,14 @@ Before export, run cleanup checks:
 - The `Create roster` action now catches generation errors and shows a toast instead of crashing the app.
 - A new APK should be copied to `Hospital Duty Roster APK/` for this fix.
 
+## Export Fix Notes
+
+### Version 1.0.6
+
+- Fixed a corrupted Excel export caused by a malformed root `Workbook` XML tag.
+- The spreadsheet export should now open as a valid workbook instead of being rejected as damaged.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this fix.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.
