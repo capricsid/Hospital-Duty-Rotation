@@ -87,6 +87,9 @@ private fun RosterPreview.toWorksheetXml(): String {
                 append(xlsxCell(ref, cell))
                 if (cell.columnSpan > 1) {
                     mergeRefs += "$ref:${columnName(column + cell.columnSpan - 1)}$rowNumber"
+                    for (offset in 1 until cell.columnSpan) {
+                        append(xlsxCell("${columnName(column + offset)}$rowNumber", cell.copy(value = "")))
+                    }
                 }
                 column += cell.columnSpan
             }

@@ -674,6 +674,13 @@ Before export, run cleanup checks:
 - This is a visual export fidelity release; roster generation rules and validation behavior remain unchanged from the last validated build.
 - A new APK should be copied to `Hospital Duty Roster APK/` for this release.
 
+### Version 1.0.12
+
+- Fixed missing borders inside merged OPD roster cells in exported `.xlsx` files.
+- The exporter now writes styled placeholder cells across every merged span so Excel can draw borders through the full merged range.
+- This is an Excel rendering fix only; roster generation rules remain unchanged.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.
