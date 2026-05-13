@@ -158,7 +158,7 @@ fun HospitalDutyRosterApp(repository: StaffRepository) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Hospital Duty Roster")
                         Text(
-                            text = "v1.0.10 - Real XLSX export",
+                            text = "v1.0.11 - Template styled XLSX",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -40,7 +40,7 @@ private data class XlsxCell(
 
 private data class XlsxRow(
     val cells: List<XlsxCell>,
-    val height: Int? = null
+    val height: Double? = null
 )
 
 private data class SummaryCounts(
@@ -109,7 +109,7 @@ private fun RosterPreview.buildRows(): List<XlsxRow> {
 
     rows += XlsxRow(
         cells = listOf(XlsxCell(title, XlsxStyle.Title, totalColumns)),
-        height = 32
+        height = TitleRowHeight
     )
     rows += XlsxRow(
         cells = listOf(XlsxCell("NAME", XlsxStyle.Header), XlsxCell("E.CODE", XlsxStyle.Header)) +
@@ -120,7 +120,8 @@ private fun RosterPreview.buildRows(): List<XlsxRow> {
                 XlsxCell("CT2", XlsxStyle.Header),
                 XlsxCell("OFF", XlsxStyle.Header),
                 XlsxCell("TOTAL DUTIES", XlsxStyle.Header)
-            )
+            ),
+        height = HeaderRowHeight
     )
     rows += XlsxRow(
         cells = listOf(XlsxCell("", XlsxStyle.Header), XlsxCell("", XlsxStyle.Header)) +
@@ -131,14 +132,15 @@ private fun RosterPreview.buildRows(): List<XlsxRow> {
                 XlsxCell("CT2", XlsxStyle.Header),
                 XlsxCell("OFF", XlsxStyle.Header),
                 XlsxCell("TOTAL", XlsxStyle.Header)
-            )
+            ),
+        height = HeaderRowHeight
     )
 
     rows.addSection("WARD TMOS", wardRows, includeSummary = true, totalColumns = totalColumns)
     rows.addSection("NURSERY TMOS", nurseryRows, includeSummary = true, totalColumns = totalColumns)
     rows += blankRow(totalColumns)
     notes.forEach { note ->
-        rows += XlsxRow(listOf(XlsxCell(note, XlsxStyle.Note, totalColumns)))
+        rows += XlsxRow(listOf(XlsxCell(note, XlsxStyle.Note, totalColumns)), height = NoteRowHeight)
     }
     rows += blankRow(totalColumns)
     rows.addSection("HOUSE OFFICER", hoRows, includeSummary = false, totalColumns = totalColumns)
@@ -146,12 +148,7 @@ private fun RosterPreview.buildRows(): List<XlsxRow> {
     rows.addOpdRows(this, totalColumns)
     rows += blankRow(totalColumns)
     rows += blankRow(totalColumns)
-    rows += XlsxRow(
-        listOf(
-            XlsxCell("DMC SIGNATURE: _______________________", XlsxStyle.Signature, totalColumns / 2),
-            XlsxCell("REGISTRAR SIGNATURE: ____________________", XlsxStyle.Signature, totalColumns - totalColumns / 2)
-        )
-    )
+    rows += signatureRow(totalColumns)
 
     return rows
 }
@@ -162,7 +159,10 @@ private fun MutableList<XlsxRow>.addSection(
     includeSummary: Boolean,
     totalColumns: Int
 ) {
-    this += XlsxRow(listOf(XlsxCell(title, XlsxStyle.Section, totalColumns)))
+    this += XlsxRow(
+        listOf(XlsxCell(title, XlsxStyle.Section, totalColumns)),
+        height = sectionRowHeight(title)
+    )
     previewRows.forEach { row ->
         val summary = row.summaryCounts()
         this += XlsxRow(
@@ -178,7 +178,8 @@ private fun MutableList<XlsxRow>.addSection(
                     )
                 } else {
                     List(SummaryColumnCount) { XlsxCell("", XlsxStyle.Cell) }
-                }
+                },
+            height = StaffRowHeight
         )
     }
 }
@@ -202,37 +203,67 @@ private fun MutableList<XlsxRow>.addOpdBlock(
     val usedColumns = 1 + opdDateLabels.size * OpdDateColumnSpan
     val trailing = (totalColumns - usedColumns).coerceAtLeast(0)
 
-    this += XlsxRow(listOf(XlsxCell("OPD ROSTER", XlsxStyle.Section, totalColumns)))
+    this += XlsxRow(listOf(XlsxCell("OPD ROSTER", XlsxStyle.Section, totalColumns)), height = OpdSectionRowHeight)
     this += XlsxRow(
         cells = listOf(XlsxCell("", XlsxStyle.Cell)) +
             opdDateLabels.map { XlsxCell(daysByLabel[it]?.dayLabel.orEmpty(), XlsxStyle.Header, OpdDateColumnSpan) } +
-            List(trailing) { XlsxCell("", XlsxStyle.Cell) }
+            List(trailing) { XlsxCell("", XlsxStyle.Cell) },
+        height = OpdRowHeight
     )
     this += XlsxRow(
         cells = listOf(XlsxCell("", XlsxStyle.Cell)) +
             opdDateLabels.map { XlsxCell(daysByLabel[it]?.dayNumber.orEmpty(), XlsxStyle.Header, OpdDateColumnSpan) } +
-            List(trailing) { XlsxCell("", XlsxStyle.Cell) }
+            List(trailing) { XlsxCell("", XlsxStyle.Cell) },
+        height = OpdRowHeight
     )
     preview.opdTracks.forEach { track ->
         val assignmentsByDate = track.dates.zip(track.assignments).toMap()
         this += XlsxRow(
             cells = listOf(XlsxCell(track.label, XlsxStyle.NameCell)) +
                 opdDateLabels.map { XlsxCell(assignmentsByDate[it].orEmpty(), XlsxStyle.Cell, OpdDateColumnSpan) } +
-                List(trailing) { XlsxCell("", XlsxStyle.Cell) }
+                List(trailing) { XlsxCell("", XlsxStyle.Cell) },
+            height = OpdRowHeight
         )
     }
 }
 
 private fun blankRow(totalColumns: Int): XlsxRow =
-    XlsxRow(List(totalColumns) { XlsxCell("", XlsxStyle.Cell) })
+    XlsxRow(List(totalColumns) { XlsxCell("", XlsxStyle.Cell) }, height = BlankRowHeight)
+
+private fun signatureRow(totalColumns: Int): XlsxRow {
+    if (totalColumns < 33) {
+        val leftSignatureSpan = (totalColumns / 2).coerceAtLeast(1)
+        return XlsxRow(
+            listOf(
+                XlsxCell("DMC/CONSULTANT", XlsxStyle.Signature, leftSignatureSpan),
+                XlsxCell("REGISTRAR", XlsxStyle.Signature, totalColumns - leftSignatureSpan)
+            ),
+            height = SignatureRowHeight
+        )
+    }
+
+    val trailingSpan = totalColumns - 33
+    val cells = mutableListOf(
+        XlsxCell("", XlsxStyle.Default),
+        XlsxCell("DMC/CONSULTANT", XlsxStyle.Signature, 11),
+        XlsxCell("", XlsxStyle.Default, 7),
+        XlsxCell("REGISTRAR", XlsxStyle.Signature, 14)
+    )
+    if (trailingSpan > 0) {
+        cells += XlsxCell("", XlsxStyle.Default, trailingSpan)
+    }
+    return XlsxRow(cells, height = SignatureRowHeight)
+}
+
+private fun sectionRowHeight(title: String): Double =
+    if (title.contains("NURSERY", ignoreCase = true)) NurserySectionRowHeight else SectionRowHeight
 
 private fun StringBuilder.appendColumns(maxColumns: Int) {
     appendLine("<cols>")
-    appendLine("""<col min="1" max="1" width="18" customWidth="1"/>""")
-    appendLine("""<col min="2" max="2" width="9" customWidth="1"/>""")
-    appendLine("""<col min="3" max="${2 + 31}" width="5" customWidth="1"/>""")
-    appendLine("""<col min="34" max="37" width="7" customWidth="1"/>""")
-    appendLine("""<col min="38" max="$maxColumns" width="13" customWidth="1"/>""")
+    for (column in 1..maxColumns) {
+        val width = ReferenceColumnWidths.getOrElse(column - 1) { 8.0 }
+        appendLine("""<col min="$column" max="$column" width="$width" customWidth="1"/>""")
+    }
     appendLine("</cols>")
 }
 
@@ -310,19 +341,33 @@ private fun corePropertiesXml(): String =
 private fun stylesXml(): String =
     """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
-<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF2D3"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9EAD3"/><bgColor indexed="64"/></patternFill></fill></fills>
-<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+<fonts count="7">
+<font><sz val="11"/><name val="Calibri"/></font>
+<font><sz val="22"/><color rgb="FF000000"/><name val="Arial Black"/></font>
+<font><sz val="12"/><color rgb="FF000000"/><name val="Arial Rounded MT Bold"/></font>
+<font><b/><sz val="18"/><color rgb="FF000000"/><name val="Arial Rounded MT Bold"/></font>
+<font><b/><sz val="14"/><color rgb="FF000000"/><name val="Arial Black"/></font>
+<font><sz val="14"/><color rgb="FF000000"/><name val="Arial Rounded MT Bold"/></font>
+<font><b/><sz val="24"/><color rgb="FF000000"/><name val="Calibri"/></font>
+</fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="5">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
+<border><left style="medium"><color auto="1"/></left><right style="medium"><color auto="1"/></right><top style="medium"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
+<border><left style="medium"><color auto="1"/></left><right style="medium"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
+<border><left style="medium"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
+</borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="8">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="3" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="4" fillId="0" borderId="4" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="3" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>"""
@@ -335,3 +380,22 @@ private fun String.xml(): String = replace("&", "&amp;")
 
 private const val SummaryColumnCount = 5
 private const val OpdDateColumnSpan = 2
+private const val TitleRowHeight = 63.0
+private const val HeaderRowHeight = 23.25
+private const val SectionRowHeight = 31.5
+private const val NurserySectionRowHeight = 38.25
+private const val StaffRowHeight = 23.25
+private const val NoteRowHeight = 23.25
+private const val BlankRowHeight = 23.25
+private const val OpdSectionRowHeight = 27.0
+private const val OpdRowHeight = 23.25
+private const val SignatureRowHeight = 45.0
+private val ReferenceColumnWidths = listOf(
+    27.0390625, 12.9140625, 7.3984375, 7.6640625, 7.3984375, 9.14453125,
+    12.375, 13.5859375, 13.046875, 18.0234375, 13.0, 17.75390625,
+    7.93359375, 6.859375, 7.6640625, 7.93359375, 8.203125, 10.0859375,
+    9.953125, 9.4140625, 7.12890625, 8.33984375, 9.28125, 7.12890625,
+    7.3984375, 6.3203125, 9.81640625, 6.859375, 8.875, 7.3984375,
+    8.33984375, 6.72265625, 13.0, 6.3203125, 13.0, 7.3984375,
+    15.6015625, 6.3203125
+)

@@ -667,6 +667,13 @@ Before export, run cleanup checks:
 - This should remove Excel's warning that the file format and extension do not match.
 - A new APK should be copied to `Hospital Duty Roster APK/` for this release.
 
+### Version 1.0.11
+
+- Updated the `.xlsx` exporter styling to more closely match the attached roster workbook template.
+- Export now uses reference-like column widths, row heights, Arial/Arial Rounded fonts, white cells, stronger borders, merged section bands, and signature placement.
+- This is a visual export fidelity release; roster generation rules and validation behavior remain unchanged from the last validated build.
+- A new APK should be copied to `Hospital Duty Roster APK/` for this release.
+
 ## Recommended Generation Flow
 
 1. Load staff, sections, and eligibility.
